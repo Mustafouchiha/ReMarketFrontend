@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+ikki_frontend/node_modules/
+
+# Environment variables (MAXFIY - GitHubga yuklamang!)
+.env
+backend/.env
+ikki_frontend/.env
+ikki_frontend/.env.local
+
+# Build outputs
+ikki_frontend/dist/
+ikki_frontend/build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

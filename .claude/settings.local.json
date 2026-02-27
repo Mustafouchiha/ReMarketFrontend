@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"C:\\\\Users\\\\User\\\\Desktop\\\\ikki_frontend \\(3\\)/ikki_frontend/src\" -type f \\\\\\( -name \"*.js\" -o -name \"*.jsx\" -o -name \"*.ts\" -o -name \"*.tsx\" \\\\\\))",
+      "Bash(cat \"/c/Users/User/Desktop/ikki_frontend \\(3\\)/ikki_frontend/src/constants/index.js\")",
+      "Bash(npm install)",
+      "Bash(cat \"/c/Users/User/Desktop/ikki_frontend \\(3\\)/ikki_frontend/vite.config.js\")",
+      "Bash(curl -s -X POST http://localhost:5000/api/auth/send-code -H \"Content-Type: application/json\" -d '{\"\"phone\"\":\"\"+998901234567\"\"}')",
+      "Bash(git branch -M main)",
+      "Bash(git remote add origin https://github.com/Mustafouchiha/miniAppReBuild.git)",
+      "Bash(git add .)"
+    ]
+  }
+}

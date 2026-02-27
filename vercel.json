@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "buildCommand": "cd ikki_frontend && npm install && npm run build",
+  "outputDirectory": "ikki_frontend/dist",
+  "installCommand": "cd ikki_frontend && npm install",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
