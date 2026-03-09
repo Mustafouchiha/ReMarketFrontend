@@ -4,18 +4,14 @@
   "outputDirectory": "ikki_frontend/dist",
   "framework": null,
   "functions": {
-    "api/**/*.js": {
+    "api/[...path].js": {
       "memory": 512,
       "maxDuration": 30
     }
   },
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
