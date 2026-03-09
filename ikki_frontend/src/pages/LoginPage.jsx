@@ -29,7 +29,28 @@ export default function LoginPage({ onLogin }) {
     if (mode === "register" && !name.trim()) { setError("Ism familiya kiriting"); return; }
     setLoading(true); setError("");
     try {
-      await authAPI.sendCode(phone.trim());
+      const res = await authAPI.sendCode(phone.trim());
+
+      // 🔧 Demo rejim: server OTP talab qilmasa — to'g'ri login/register
+      if (res.otpRequired === false) {
+        let data;
+        if (mode === "login") {
+          data = await authAPI.login({ phone: phone.trim(), code: "" });
+        } else {
+          data = await authAPI.register({
+            name: name.trim(),
+            phone: phone.trim(),
+            code: "",
+            telegram: telegram.trim(),
+          });
+        }
+        setToken(data.token);
+        localStorage.setItem("rm_user", JSON.stringify(data.user));
+        onLogin(data.user);
+        return;
+      }
+
+      // Real SMS rejim: 2-qadam
       setStep(2);
       startTimer();
     } catch (e) {
@@ -142,7 +163,7 @@ export default function LoginPage({ onLogin }) {
                 <div style={{ fontSize:12, fontWeight:700, color:C.primaryDark }}>Kod yuborildi</div>
                 <div style={{ fontSize:11, color:C.textSub }}>{phone} raqamiga 6 xonali kod</div>
                 <div style={{ fontSize:10, color:C.textMuted, marginTop:2 }}>
-                  Hozircha: backend <b>console</b> da ko'ring
+                  🧪 Demo: Vercel <b>Function Logs</b> dan kodni ko'ring
                 </div>
               </div>
             </div>
