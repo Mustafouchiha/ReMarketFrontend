@@ -35,8 +35,8 @@ export default function LoginPage({ onLogin }) {
   // 2-bosqich: kod + API chaqirish
   const handleSubmit = async () => {
     setError("");
-    if (!code.trim() || code.trim().length < 4) {
-      setError("Kamida 4 xonali kod kiriting"); return;
+    if (code.trim().length !== 4) {
+      setError("4 xonali kod kiriting"); return;
     }
 
     setLoading(true);
@@ -216,7 +216,7 @@ export default function LoginPage({ onLogin }) {
           {/* Kod input */}
           <input
             value={code}
-            onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
             placeholder="• • • •"
             inputMode="numeric"
             autoFocus
@@ -244,7 +244,7 @@ export default function LoginPage({ onLogin }) {
           }}>
             <span style={{ fontSize: 14 }}>🧪</span>
             <span style={{ fontSize: 11, color: C.primaryDark, fontWeight: 600 }}>
-              Demo rejim: ixtiyoriy 4+ raqam kiriting (masalan: 1234)
+              Demo rejim: ixtiyoriy 4 ta raqam kiriting (masalan: 1234)
             </span>
           </div>
 
