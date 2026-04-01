@@ -2,18 +2,20 @@ import { useState } from "react";
 import { Lbl, TInput, BtnPrimary, BtnGhost } from "../components/UI";
 import AvatarUpload from "../components/AvatarUpload";
 import LocIcon from "../components/LocIcon";
+import PaymentPage from "./PaymentPage";
 import { C, COND } from "../constants";
 import { authAPI } from "../services/api";
 import {
   Package, Calendar, Inbox, Trash2,
-  Pencil, Check, LogOut, Lock,
+  Pencil, Check, LogOut, Lock, CreditCard,
 } from "lucide-react";
 
 // ─── PROFILE SCREEN ───────────────────────────────────────────────
 export default function ProfilePage({ user, setUser, myProducts, onDelete, onLogout }) {
-  const [editMode, setEditMode] = useState(false);
-  const [draft, setDraft]       = useState({ name: user.name, avatar: user.avatar });
-  const [saving, setSaving]     = useState(false);
+  const [editMode,  setEditMode]  = useState(false);
+  const [draft,     setDraft]     = useState({ name: user.name, avatar: user.avatar });
+  const [saving,    setSaving]    = useState(false);
+  const [activeTab, setActiveTab] = useState("profile"); // "profile" | "payment"
 
   const save = async () => {
     setSaving(true);
@@ -30,6 +32,25 @@ export default function ProfilePage({ user, setUser, myProducts, onDelete, onLog
     <div style={{ padding:"20px 16px 10px", overflowY:"auto", fontFamily:"'Nunito','Segoe UI',sans-serif",
                   background:C.bg, minHeight:"100vh", paddingBottom:84,
                   maxWidth:430, margin:"0 auto", position:"relative" }}>
+
+      {/* Tab: Profil | To'lovlar */}
+      <div style={{ display:"flex", background:C.card, borderRadius:16, padding:4,
+                    marginBottom:18, gap:4, border:`1px solid ${C.border}` }}>
+        {[["profile","👤 Profil"],["payment","💳 To'lovlar"]].map(([tab, lbl]) => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+            flex:1, padding:"9px 0", borderRadius:12, border:"none",
+            cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:700, transition:"all .2s",
+            background: activeTab===tab ? C.primaryDark : "transparent",
+            color: activeTab===tab ? "white" : C.textMuted,
+          }}>{lbl}</button>
+        ))}
+      </div>
+
+      {/* To'lovlar tab */}
+      {activeTab === "payment" && <PaymentPage user={user} embedded />}
+
+      {/* ── Profile content ── */}
+      {activeTab === "profile" && <>
 
       {/* ── Profile card ── */}
       <div style={{ background:C.card, borderRadius:22, padding:"24px 18px 20px",
@@ -171,6 +192,8 @@ export default function ProfilePage({ user, setUser, myProducts, onDelete, onLog
         <LogOut size={16} /> Chiqish (Logout)
       </button>
       <div style={{ height:16 }} />
+
+      </> /* end activeTab === "profile" */}
     </div>
   );
 }

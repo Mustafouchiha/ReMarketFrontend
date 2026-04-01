@@ -161,21 +161,12 @@ export default function App() {
         <div style={{ fontSize:9, marginTop:4, color:C.textMuted, fontWeight:400 }}>E'lon</div>
       </div>
 
-      {/* 💳 To'lovlar */}
-      <div onClick={() => setNav("payment")}
-        style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
-        <div style={{ fontSize:22, lineHeight:1 }}>💳</div>
-        <div style={{ fontSize:9, marginTop:3,
-          color: nav==="payment" ? C.primaryDark : C.textMuted,
-          fontWeight: nav==="payment" ? 800 : 400 }}>To'lov</div>
-      </div>
-
       {/* 👤 Profil */}
       <div onClick={() => setNav("profile")}
         style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
         <div style={{ width:30, height:30, borderRadius:"50%", margin:"0 auto",
                       overflow:"hidden",
-                      border:`2.5px solid ${nav==="profile" ? C.primaryDark : C.border}`,
+                      border:`2.5px solid ${C.border}`,
                       background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,
                       display:"flex", alignItems:"center", justifyContent:"center" }}>
           {user.avatar
@@ -185,9 +176,7 @@ export default function App() {
               </span>
           }
         </div>
-        <div style={{ fontSize:9, marginTop:3,
-          color: nav==="profile" ? C.primaryDark : C.textMuted,
-          fontWeight: nav==="profile" ? 700 : 400 }}>Profil</div>
+        <div style={{ fontSize:9, marginTop:3, color:C.textMuted, fontWeight:400 }}>Profil</div>
       </div>
     </div>
   );
@@ -250,14 +239,7 @@ export default function App() {
         </>
       )}
 
-      {loggedIn && nav === "payment" && (
-        <>
-          <PaymentPage user={user} />
-          <BottomNav />
-        </>
-      )}
-
-      {loggedIn && (nav === "home" || (nav !== "profile" && nav !== "payment")) && (
+      {loggedIn && (nav === "home" || (nav !== "profile")) && (
         <HomePage
           user={user}
           products={products}

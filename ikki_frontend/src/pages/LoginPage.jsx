@@ -182,9 +182,26 @@ export default function LoginPage({ onLogin }) {
             <><Lbl>Ism Familiya *</Lbl><TInput value={name} onChange={setName} placeholder="Abdulloh Karimov" /></>
           )}
           <Lbl>Telefon raqam *</Lbl>
-          <PhoneInput value={phone} onChange={setPhone} onEnter={handleNextStep} />
-          {mode === "register" && (
-            <><Lbl>Telegram (ixtiyoriy)</Lbl><TInput value={telegram} onChange={setTelegram} placeholder="@username" /></>
+          {mode === "register" ? (
+            /* Ro'yxatdan o'tishda telefon qulflangan (bot orqali kelgan) */
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 13px",
+                          borderRadius:12, border:`1.5px solid ${C.border}`, background:"#F9F9F9",
+                          marginBottom:13, color:C.textMuted, fontSize:14 }}>
+              <span style={{ color:C.textSub, fontWeight:700, fontSize:13 }}>+998</span>
+              {phone}
+            </div>
+          ) : (
+            <PhoneInput value={phone} onChange={setPhone} onEnter={handleNextStep} />
+          )}
+          {mode === "register" && telegram && (
+            <>
+              <Lbl>Telegram</Lbl>
+              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 13px",
+                            borderRadius:12, border:`1.5px solid ${C.border}`, background:"#F9F9F9",
+                            marginBottom:13, color:C.textMuted, fontSize:14 }}>
+                {telegram}
+              </div>
+            </>
           )}
 
           {error && <ErrorBox msg={error} />}
