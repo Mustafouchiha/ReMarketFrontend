@@ -85,13 +85,14 @@ export default function LoginPage({ onLogin }) {
 
   const handleSendCode = async () => {
     setError(""); setNeedBot(false);
-    if (!phone.trim()) { setError("Telefon raqam kiriting"); return; }
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 9) { setError("To'liq telefon raqam kiriting"); return; }
     setLoading(true);
     try {
-      await authAPI.sendCode(phone.replace(/\s/g, ""));
+      await authAPI.sendCode(digits);
       setStep(2);
     } catch (e) {
-      if (e.message?.includes("botda") || e.message?.includes("Requrilishbot")) {
+      if (e?.needBot || e.message?.includes("ro'yxatdan") || e.message?.includes("Requrilishbot")) {
         setNeedBot(true);
       } else {
         setError(e.message || "Xatolik yuz berdi");
@@ -108,7 +109,7 @@ export default function LoginPage({ onLogin }) {
     const tgChatId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || null;
     try {
       const data = await authAPI.login({
-        phone: phone.replace(/\s/g, ""),
+        phone: phone.replace(/\D/g, ""),
         code: code.trim(),
         tgChatId,
       });
