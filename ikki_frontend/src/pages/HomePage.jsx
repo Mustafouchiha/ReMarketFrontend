@@ -5,69 +5,91 @@ import LocIcon from "../components/LocIcon";
 import PhotoUpload from "../components/PhotoUpload";
 import StepBar from "../components/StepBar";
 import { C, COND, UZ, CATS, CAT_ICO, EMPTY_FORM, OPERATOR } from "../constants";
-import { productsAPI, offersAPI } from "../services/api";
+import { productsAPI, offersAPI, paymentsAPI, authAPI } from "../services/api";
 import Logo from "../components/Logo";
 import {
   Bell, Lock, Search, SearchX, Image as ImageIcon,
-  Trash2, Check, Send, User, Phone, Hash, Info,
+  Check, Send, User, Phone, Hash, Info,
   Loader2, CheckCircle, Clock, Package, CreditCard,
   Tag, Home, Plus, Camera, AlertCircle, Rocket,
-  ChevronDown, X, ArrowLeft, ArrowRight,
+  ChevronDown, X, ArrowLeft, ArrowRight, MapPin,
 } from "lucide-react";
 
 export default function HomePage({
   user, products, setProducts, offers, setOffers,
   onNavChange, homeAction, setHomeAction,
-  onProductAdded, onDelete, loggedIn, onRequireAuth,
+  onProductAdded, onDelete, isOperator = false, loggedIn, onRequireAuth,
 }) {
-  const [search,     setSearch]     = useState("");
-  const [activeCats, setActiveCats] = useState([]);
-  const [selected,   setSelected]   = useState(null);
-  const [showOffer,  setShowOffer]  = useState(false);
-  const [showNotifs, setShowNotifs] = useState(false);
-  const [showPayment,setShowPayment]= useState(null);
-  const [showBuyer,  setShowBuyer]  = useState(null);
-  const [showLoc,    setShowLoc]    = useState(false);
-  const [fVil,   setFVil]   = useState("");
-  const [fTum,   setFTum]   = useState("");
-  const [tVil,   setTVil]   = useState("");
-  const [tTum,   setTTum]   = useState("");
-  const [showAdd,    setShowAdd]    = useState(false);
-  const [step,       setStep]       = useState(1);
-  const [addImgIdx,  setAddImgIdx]  = useState(0);
-  const [form,    setForm]    = useState(EMPTY_FORM);
+  const [search,      setSearch]      = useState("");
+  const [activeCats,  setActiveCats]  = useState([]);
+  const [selected,    setSelected]    = useState(null);
+  const [showOffer,   setShowOffer]   = useState(false);
+  const [showNotifs,  setShowNotifs]  = useState(false);
+  const [showPayment, setShowPayment] = useState(null);
+  const [cardFrom,    setCardFrom]    = useState("");
+  const [note,        setNote]        = useState("");
+  const [paying,      setPaying]      = useState(false);
+  const [showLoc,     setShowLoc]     = useState(false);
+  const [fVil,        setFVil]        = useState("");
+  const [fTum,        setFTum]        = useState("");
+  const [tVil,        setTVil]        = useState("");
+  const [tTum,        setTTum]        = useState("");
+  const [showAdd,     setShowAdd]     = useState(false);
+  const [step,        setStep]        = useState(1);
+  const [addImgIdx,   setAddImgIdx]   = useState(0);
+  const [form,        setForm]        = useState(EMPTY_FORM);
   const [submitting,  setSubmitting]  = useState(false);
   const [offerSending,setOfferSending]= useState(false);
   const [photoIdx,    setPhotoIdx]    = useState(0);
-  const [lightbox,    setLightbox]    = useState(null); // { photos, idx }
+  const [lightbox,    setLightbox]    = useState(null);
   const [lbZoom,      setLbZoom]      = useState(1);
+  const [postId,     setPostId]     = useState(null);
   const lbTouch = useRef({ count:0, startX:0, startDist:0, startZoom:1 });
 
-  // ── Lightbox helpers ─────────────────────────────────────────────
+  // Handle URL token and postId
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const urlPostId = urlParams.get('postId');
+    
+    if (token) {
+      localStorage.setItem('rm_token', token);
+      // Load user data
+      authAPI.me().then(userData => {
+        if (onNavChange) onNavChange('home');
+      }).catch(err => {
+        console.error('Token validation failed:', err);
+      });
+    }
+    
+    if (urlPostId) {
+      setPostId(urlPostId);
+    }
+  }, []);
+
+  // If postId exists, show operator post view
+  if (postId) {
+    const OperatorPostView = require('../OperatorPostView').default;
+    return <OperatorPostView postId={postId} onClose={() => setPostId(null)} />;
+  }
+
   const openLb  = (photos, idx) => { setLightbox({ photos, idx }); setLbZoom(1); };
   const closeLb = () => { setLightbox(null); setLbZoom(1); };
-  const lbPrev  = () => setLightbox(lb => ({ ...lb, idx:(lb.idx - 1 + lb.photos.length) % lb.photos.length }));
-  const lbNext  = () => setLightbox(lb => ({ ...lb, idx:(lb.idx + 1) % lb.photos.length }));
+  const lbPrev  = () => setLightbox(lb => ({ ...lb, idx:(lb.idx-1+lb.photos.length)%lb.photos.length }));
+  const lbNext  = () => setLightbox(lb => ({ ...lb, idx:(lb.idx+1)%lb.photos.length }));
 
   const lbTouchStart = (e) => {
     lbTouch.current.count = e.touches.length;
-    if (e.touches.length === 1) {
-      lbTouch.current.startX = e.touches[0].clientX;
-    } else if (e.touches.length === 2) {
-      lbTouch.current.startDist = Math.hypot(
-        e.touches[1].clientX - e.touches[0].clientX,
-        e.touches[1].clientY - e.touches[0].clientY
-      );
+    if (e.touches.length === 1) lbTouch.current.startX = e.touches[0].clientX;
+    else if (e.touches.length === 2) {
+      lbTouch.current.startDist = Math.hypot(e.touches[1].clientX-e.touches[0].clientX, e.touches[1].clientY-e.touches[0].clientY);
       lbTouch.current.startZoom = lbZoom;
     }
   };
   const lbTouchMove = (e) => {
     if (e.touches.length === 2) {
-      const d = Math.hypot(
-        e.touches[1].clientX - e.touches[0].clientX,
-        e.touches[1].clientY - e.touches[0].clientY
-      );
-      setLbZoom(z => Math.min(5, Math.max(1, lbTouch.current.startZoom * d / lbTouch.current.startDist)));
+      const d = Math.hypot(e.touches[1].clientX-e.touches[0].clientX, e.touches[1].clientY-e.touches[0].clientY);
+      setLbZoom(z => Math.min(5, Math.max(1, lbTouch.current.startZoom*d/lbTouch.current.startDist)));
     }
   };
   const lbTouchEnd = (e) => {
@@ -90,14 +112,11 @@ export default function HomePage({
       && (!fTum || p.tuman===fTum);
   });
 
-  // Mahsulot ochilganda carousel ni boshidan boshlash
   const openSelected = (p) => { setSelected(p); setPhotoIdx(0); };
-
   const openLoc  = () => { setTVil(fVil); setTTum(fTum); setShowLoc(true); };
   const applyLoc = () => { setFVil(tVil); setFTum(tVil?tTum:""); setShowLoc(false); };
   const clearLoc = () => { setTVil(""); setTTum(""); setFVil(""); setFTum(""); setShowLoc(false); };
   const requireAuth = () => { if (onRequireAuth) onRequireAuth(); else onNavChange?.("login"); };
-
   const openAdd  = () => { if (!loggedIn) return requireAuth(); setForm(EMPTY_FORM); setStep(1); setAddImgIdx(0); setShowAdd(true); };
   const closeAdd = () => { setShowAdd(false); setStep(1); setForm(EMPTY_FORM); setAddImgIdx(0); };
 
@@ -105,13 +124,20 @@ export default function HomePage({
     if (homeAction === "openAdd") { openAdd(); setHomeAction(null); }
   }, [homeAction]);
 
-  const anySheetOpen = showLoc || !!selected || showOffer || showNotifs || !!showPayment || !!showBuyer || showAdd;
+  const anySheetOpen = showLoc || !!selected || showOffer || showNotifs || !!showPayment || showAdd;
 
   const submitProd = async () => {
     if (!form.name||!form.price||!form.qty||!form.viloyat||!form.photos?.length) return;
     setSubmitting(true);
     try {
-      const newProd = await productsAPI.create({ ...form, photo: form.photos[0], photos: form.photos, price:parseInt(form.price), qty:parseInt(form.qty) });
+      const newProd = await productsAPI.create({
+        ...form,
+        photo: form.photos[0],
+        photos: form.photos,
+        price: parseInt(form.price),
+        qty: parseInt(form.qty),
+        mahalla: form.mahalla || "",
+      });
       if (onProductAdded) onProductAdded(newProd);
       closeAdd();
     } catch (e) { alert(e.message); }
@@ -129,11 +155,22 @@ export default function HomePage({
   };
 
   const confirmPayment = async (offerId) => {
+    setPaying(true);
     try {
-      await offersAPI.markPaid(offerId);
-      setOffers(prev => prev.map(o => o.id===offerId ? {...o, status:"paid"} : o));
+      await paymentsAPI.send({ offerId, cardFrom, note });
+      const result = await paymentsAPI.confirm(offerId);
+      // Remove product from feed immediately
+      if (result.productId) {
+        setProducts(prev => prev.filter(p => p.id !== result.productId));
+      }
+      setOffers(prev => prev.map(o => o.id===offerId ? { ...o, status:"paid" } : o));
       setShowPayment(null);
-    } catch (e) { alert(e.message); }
+      setCardFrom(""); setNote("");
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setPaying(false);
+    }
   };
 
   const myNotifs    = offers;
@@ -151,12 +188,11 @@ export default function HomePage({
                   overflowY:anySheetOpen?"hidden":"auto",
                   height:anySheetOpen?"100vh":"auto" }}>
 
-      {/* bg glow */}
       <div style={{ position:"fixed", top:-100, right:-80, width:280, height:280, borderRadius:"50%",
                     background:"radial-gradient(circle,rgba(255,179,128,0.12) 0%,transparent 70%)",
                     pointerEvents:"none", zIndex:0 }} />
 
-      {/* ═══ STICKY HEADER ═══ */}
+      {/* HEADER */}
       <div style={{ padding:"16px 16px 12px", background:"rgba(255,255,255,0.93)",
                     backdropFilter:"blur(14px)", position:"sticky", top:0, zIndex:20,
                     borderBottom:`1px solid ${C.border}`, boxShadow:"0 1px 8px rgba(0,0,0,0.04)" }}>
@@ -164,13 +200,11 @@ export default function HomePage({
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:7 }}>
               <Logo size={32} />
-              <span style={{ fontSize:20, fontWeight:900, color:C.text, letterSpacing:"-0.4px" }}>ReMarket</span>
+              <span style={{ fontSize:20, fontWeight:900, color:C.text, letterSpacing:"-0.4px" }}>ReQurilish</span>
             </div>
             <div style={{ fontSize:10, color:C.textMuted, marginTop:1 }}>Qayta ishlangan qurilish materiallari</div>
           </div>
-
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            {/* location btn */}
             <button onClick={openLoc}
               style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 11px",
                        borderRadius:12, border:`1.5px solid ${isLocOn?C.primary:C.border}`,
@@ -184,7 +218,6 @@ export default function HomePage({
               <ChevronDown size={11} style={{ flexShrink:0 }} />
             </button>
 
-            {/* Bell / Lock */}
             {loggedIn ? (
               <div style={{ position:"relative", cursor:"pointer" }} onClick={() => setShowNotifs(true)}>
                 <div style={{ width:40, height:40, borderRadius:12,
@@ -214,7 +247,6 @@ export default function HomePage({
           </div>
         </div>
 
-        {/* search */}
         <div style={{ position:"relative" }}>
           <Search size={14} style={{ position:"absolute", left:13, top:"50%", transform:"translateY(-50%)", opacity:0.4 }} />
           <input placeholder="Material, shahar, tuman..." value={search}
@@ -229,12 +261,10 @@ export default function HomePage({
         </div>
       </div>
 
-      {/* category pills */}
+      {/* Category pills */}
       <div style={{ padding:"10px 16px", display:"flex", flexWrap:"wrap", gap:7 }}>
         {CATS.map(cat => {
-          if (cat === "Barchasi") {
-            return <Pill key={cat} active={activeCats.length===0} onClick={() => setActiveCats([])}>Barchasi</Pill>;
-          }
+          if (cat === "Barchasi") return <Pill key={cat} active={activeCats.length===0} onClick={() => setActiveCats([])}>Barchasi</Pill>;
           const isActive = activeCats.includes(cat);
           return (
             <Pill key={cat} active={isActive} onClick={() => setActiveCats(prev =>
@@ -245,7 +275,6 @@ export default function HomePage({
         })}
       </div>
 
-      {/* active location chip */}
       {isLocOn && (
         <div style={{ padding:"0 16px 8px" }}>
           <div style={{ display:"inline-flex", alignItems:"center", gap:5,
@@ -262,7 +291,7 @@ export default function HomePage({
         <span style={{ fontSize:11, color:C.textMuted, fontWeight:600 }}>{filtered.length} ta mahsulot</span>
       </div>
 
-      {/* grid */}
+      {/* Product grid */}
       <div style={{ padding:"0 16px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
         {filtered.map(p => <PCard key={p.id} p={p} isOwn={loggedIn && p.ownerId===user.id} onClick={() => openSelected(p)} />)}
       </div>
@@ -277,7 +306,7 @@ export default function HomePage({
         </div>
       )}
 
-      {/* ═══ LOCATION SHEET ═══ */}
+      {/* LOCATION SHEET */}
       {showLoc && (
         <Sheet onClose={() => setShowLoc(false)}>
           <div style={{ fontSize:16, fontWeight:800, color:C.text, marginBottom:14 }}>
@@ -302,136 +331,116 @@ export default function HomePage({
             </>
           )}
           <div style={{ display:"flex", gap:9 }}>
-            <BtnGhost onClick={clearLoc}><Trash2 size={14} /> Tozalash</BtnGhost>
+            <BtnGhost onClick={clearLoc}>Tozalash</BtnGhost>
             <BtnPrimary onClick={applyLoc}><Check size={14} /> Qo'llash</BtnPrimary>
           </div>
         </Sheet>
       )}
 
-      {/* ═══ PRODUCT DETAIL SHEET ═══ */}
+      {/* PRODUCT DETAIL SHEET */}
       {selected && (() => {
         const selPhotos = (selected.photos?.length ? selected.photos : (selected.photo ? [selected.photo] : []));
         const hasManyPhotos = selPhotos.length > 1;
         return (
-        <Sheet onClose={() => setSelected(null)} maxH="80vh">
-          {/* ── Carousel ── */}
-          <div style={{ position:"relative", width:"100%", height:200, borderRadius:18, overflow:"hidden",
-                        background:C.primaryLight, marginBottom:16,
-                        display:"flex", alignItems:"center", justifyContent:"center" }}>
-            {selPhotos.length > 0
-              ? <img src={selPhotos[photoIdx]} alt={selected.name}
-                  onClick={() => openLb(selPhotos, photoIdx)}
-                  style={{ width:"100%", height:"100%", objectFit:"cover", cursor:"zoom-in" }} />
-              : <ImageIcon size={56} color={C.primaryBorder} style={{ opacity:0.4 }} />
-            }
-
-            {/* Prev / Next tugmalar */}
-            {hasManyPhotos && (
-              <>
-                <button onClick={() => setPhotoIdx(i => (i - 1 + selPhotos.length) % selPhotos.length)}
-                  style={{ position:"absolute", left:8, top:"50%", transform:"translateY(-50%)",
-                           width:32, height:32, borderRadius:"50%", border:"none",
-                           background:"rgba(0,0,0,0.45)", color:"white", cursor:"pointer",
-                           display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>
-                  ‹
-                </button>
-                <button onClick={() => setPhotoIdx(i => (i + 1) % selPhotos.length)}
-                  style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)",
-                           width:32, height:32, borderRadius:"50%", border:"none",
-                           background:"rgba(0,0,0,0.45)", color:"white", cursor:"pointer",
-                           display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>
-                  ›
-                </button>
-
-                {/* Dots */}
-                <div style={{ position:"absolute", bottom:8, left:"50%", transform:"translateX(-50%)",
-                              display:"flex", gap:5 }}>
-                  {selPhotos.map((_, i) => (
-                    <div key={i} onClick={() => setPhotoIdx(i)}
-                      style={{ width: i === photoIdx ? 18 : 6, height:6, borderRadius:3,
-                               background: i === photoIdx ? "white" : "rgba(255,255,255,0.5)",
-                               cursor:"pointer", transition:"all 0.2s" }} />
-                  ))}
-                </div>
-
-                {/* Counter */}
-                <div style={{ position:"absolute", top:8, right:8,
-                              background:"rgba(0,0,0,0.45)", color:"white",
-                              fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>
-                  {photoIdx + 1}/{selPhotos.length}
-                </div>
-              </>
-            )}
-          </div>
-
-          <div style={{ fontSize:19, fontWeight:900, color:C.text, marginBottom:8 }}>{selected.name}</div>
-
-          <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5, color:C.textMuted, marginBottom:4 }}>
-              Manzil
+          <Sheet onClose={() => setSelected(null)} maxH="80vh">
+            <div style={{ position:"relative", width:"100%", height:200, borderRadius:18, overflow:"hidden",
+                          background:C.primaryLight, marginBottom:16,
+                          display:"flex", alignItems:"center", justifyContent:"center" }}>
+              {selPhotos.length > 0
+                ? <img src={selPhotos[photoIdx]} alt={selected.name}
+                    onClick={() => openLb(selPhotos, photoIdx)}
+                    style={{ width:"100%", height:"100%", objectFit:"cover", cursor:"zoom-in" }} />
+                : <ImageIcon size={56} color={C.primaryBorder} style={{ opacity:0.4 }} />
+              }
+              {hasManyPhotos && (
+                <>
+                  <button onClick={() => setPhotoIdx(i => (i-1+selPhotos.length)%selPhotos.length)}
+                    style={{ position:"absolute", left:8, top:"50%", transform:"translateY(-50%)",
+                             width:32, height:32, borderRadius:"50%", border:"none",
+                             background:"rgba(0,0,0,0.45)", color:"white", cursor:"pointer",
+                             display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>‹</button>
+                  <button onClick={() => setPhotoIdx(i => (i+1)%selPhotos.length)}
+                    style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)",
+                             width:32, height:32, borderRadius:"50%", border:"none",
+                             background:"rgba(0,0,0,0.45)", color:"white", cursor:"pointer",
+                             display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>›</button>
+                  <div style={{ position:"absolute", bottom:8, left:"50%", transform:"translateX(-50%)", display:"flex", gap:5 }}>
+                    {selPhotos.map((_, i) => (
+                      <div key={i} onClick={() => setPhotoIdx(i)}
+                        style={{ width:i===photoIdx?18:6, height:6, borderRadius:3,
+                                 background:i===photoIdx?"white":"rgba(255,255,255,0.5)",
+                                 cursor:"pointer", transition:"all 0.2s" }} />
+                    ))}
+                  </div>
+                  <div style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.45)", color:"white",
+                                fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>
+                    {photoIdx+1}/{selPhotos.length}
+                  </div>
+                </>
+              )}
             </div>
-            <div style={{ display:"inline-flex", alignItems:"center", gap:6,
-                          padding:"6px 10px", borderRadius:10,
-                          background:C.bg, border:`1px solid ${C.border}` }}>
-              <LocIcon size={14} color={C.primaryDark} />
-              <span style={{ fontSize:13, fontWeight:700, color:C.text }}>
-                {selected.viloyat}{selected.tuman?` › ${selected.tuman}`:""}
+
+            <div style={{ fontSize:19, fontWeight:900, color:C.text, marginBottom:8 }}>{selected.name}</div>
+
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5, color:C.textMuted, marginBottom:4 }}>Manzil</div>
+              <div style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"6px 10px", borderRadius:10,
+                            background:C.bg, border:`1px solid ${C.border}` }}>
+                <LocIcon size={14} color={C.primaryDark} />
+                <span style={{ fontSize:13, fontWeight:700, color:C.text }}>
+                  {selected.viloyat}{selected.tuman?` › ${selected.tuman}`:""}{selected.mahalla?` › ${selected.mahalla}`:""}
+                </span>
+              </div>
+            </div>
+
+            {(() => { const cc=COND[selected.condition]; return (
+              <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:10,
+                             background:cc.bg, color:cc.text, display:"inline-block", marginBottom:16 }}>
+                ● {selected.condition} holat
               </span>
-            </div>
-          </div>
+            );})()}
 
-          {(() => { const cc=COND[selected.condition]; return (
-            <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:10,
-                           background:cc.bg, color:cc.text, display:"inline-block", marginBottom:16 }}>
-              ● {selected.condition} holat
-            </span>
-          );})()}
-
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:9, marginBottom:18 }}>
-            {[
-              [CreditCard, "Narx",  `${selected.price.toLocaleString()} so'm/${selected.unit}`],
-              [Package,    "Miqdor",`${selected.qty} ${selected.unit}`],
-              [Tag,        "Toifa", selected.category],
-            ].map(([Icon,l,v]) => (
-              <div key={l} style={{ background:C.bg, borderRadius:12, padding:"10px 7px",
-                                    textAlign:"center", border:`1px solid ${C.border}` }}>
-                <div style={{ display:"flex", justifyContent:"center", marginBottom:4 }}>
-                  <Icon size={14} color={C.primaryDark} />
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:9, marginBottom:18 }}>
+              {[
+                [CreditCard, "Narx",  `${selected.price.toLocaleString()} so'm/${selected.unit}`],
+                [Package,    "Miqdor",`${selected.qty} ${selected.unit}`],
+                [Tag,        "Toifa", selected.category],
+              ].map(([Icon,l,v]) => (
+                <div key={l} style={{ background:C.bg, borderRadius:12, padding:"10px 7px",
+                                      textAlign:"center", border:`1px solid ${C.border}` }}>
+                  <div style={{ display:"flex", justifyContent:"center", marginBottom:4 }}>
+                    <Icon size={14} color={C.primaryDark} />
+                  </div>
+                  <div style={{ fontSize:9, color:C.textMuted, marginBottom:2 }}>{l}</div>
+                  <div style={{ fontSize:10, fontWeight:700, color:C.text }}>{v}</div>
                 </div>
-                <div style={{ fontSize:9, color:C.textMuted, marginBottom:2 }}>{l}</div>
-                <div style={{ fontSize:10, fontWeight:700, color:C.text }}>{v}</div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          {selected.ownerId === user.id ? (
-            <div style={{ background:C.primaryLight, border:`1px solid ${C.primaryBorder}`,
-                          borderRadius:14, padding:"12px 16px", textAlign:"center" }}>
-              <div style={{ display:"flex", justifyContent:"center", marginBottom:4 }}>
-                <Tag size={18} color={C.primaryDark} />
+            {selected.ownerId === user.id ? (
+              <div style={{ background:C.primaryLight, border:`1px solid ${C.primaryBorder}`,
+                            borderRadius:14, padding:"12px 16px", textAlign:"center" }}>
+                <div style={{ fontSize:12, fontWeight:700, color:C.primaryDark }}>Bu sizning e'loningiz</div>
               </div>
-              <div style={{ fontSize:12, fontWeight:700, color:C.primaryDark }}>Bu sizning e'loningiz</div>
-              <div style={{ fontSize:11, color:C.textMuted, marginTop:2 }}>O'z mahsulotingizni sotib ololmaysiz</div>
-            </div>
-          ) : (
-            <div style={{ display:"flex", gap:9 }}>
-              <BtnGhost onClick={() => setSelected(null)}>Yopish</BtnGhost>
-              <BtnPrimary onClick={() => { if (!loggedIn) return requireAuth(); setShowOffer(selected); }}>
-                <Send size={15} /> Taklif yuborish
-              </BtnPrimary>
-            </div>
-          )}
+            ) : (
+              <div style={{ display:"flex", gap:9 }}>
+                <BtnGhost onClick={() => setSelected(null)}>Yopish</BtnGhost>
+                <BtnPrimary onClick={() => { if (!loggedIn) return requireAuth(); setShowOffer(selected); }}>
+                  <Send size={15} /> Taklif yuborish
+                </BtnPrimary>
+              </div>
+            )}
 
-          {selected.ownerId === user.id && (
-            <div style={{ marginTop:10, display:"flex", justifyContent:"center" }}>
-              <BtnGhost onClick={() => setSelected(null)}>Yopish</BtnGhost>
-            </div>
-          )}
-        </Sheet>
+            {selected.ownerId === user.id && (
+              <div style={{ marginTop:10, display:"flex", justifyContent:"center" }}>
+                <BtnGhost onClick={() => setSelected(null)}>Yopish</BtnGhost>
+              </div>
+            )}
+          </Sheet>
         );
       })()}
 
-      {/* ═══ TAKLIF YUBORISH SHEET ═══ */}
+      {/* OFFER SHEET */}
       {showOffer && (
         <Sheet onClose={() => setShowOffer(false)} maxH="72vh">
           <div style={{ fontSize:16, fontWeight:800, color:C.text, marginBottom:6,
@@ -439,7 +448,7 @@ export default function HomePage({
             <Send size={16} color={C.primaryDark} /> Taklif yuborish
           </div>
           <div style={{ fontSize:11, color:C.textMuted, marginBottom:18 }}>
-            Sizning ma'lumotlaringiz mahsulot egasiga yuboriladi
+            Taklif yuborildi. Sotuvchi 5% to'lovni qilgandan keyin ma'lumotlar ochiladi.
           </div>
 
           <div style={{ display:"flex", gap:12, alignItems:"center", background:C.primaryLight,
@@ -457,7 +466,7 @@ export default function HomePage({
               <div style={{ fontSize:12, color:C.primaryDark, fontWeight:700 }}>
                 {showOffer.price?.toLocaleString()} so'm/{showOffer.unit}
               </div>
-              <div style={{ fontSize:10, color:C.textMuted }}>Mahsulot ID: #{showOffer.id}</div>
+              <div style={{ fontSize:10, color:C.textMuted }}>ID: #{showOffer.publicId || showOffer.id}</div>
             </div>
           </div>
 
@@ -467,10 +476,10 @@ export default function HomePage({
               Sizning ma'lumotlaringiz
             </div>
             {[
-              [User,  "Ism",       user.name],
-              [Phone, "Telefon",   user.phone],
-              [Send,  "Telegram",  user.telegram||"@noma'lum"],
-              [Hash,  "Mahsulot ID", `#${showOffer.id}`],
+              [User,  "Ism",     user.name],
+              [Phone, "Telefon", user.phone],
+              [Send,  "Telegram",user.telegram||"@noma'lum"],
+              [Hash,  "ID",      `#${showOffer.publicId || showOffer.id}`],
             ].map(([Icon,l,v]) => (
               <div key={l} style={{ display:"flex", justifyContent:"space-between",
                                     padding:"6px 0", borderBottom:`1px solid ${C.border}` }}>
@@ -487,7 +496,7 @@ export default function HomePage({
                         border:"1px solid #FDE68A",
                         display:"flex", alignItems:"flex-start", gap:7 }}>
             <Info size={14} color="#D97706" style={{ flexShrink:0, marginTop:1 }} />
-            Taklif yuborgandan so'ng mahsulot egasi sizga bog'lanadi. To'lov faqat operator orqali amalga oshiriladi.
+            Taklif yuborgandan so'ng mahsulot egasi (sotuvchi) narxining 5% to'lovini operator orqali qiladi. To'lovdan keyin bot orqali sotuvchining telefon/telegram/ismi sizga ochiladi.
           </div>
 
           <div style={{ display:"flex", gap:9 }}>
@@ -502,7 +511,7 @@ export default function HomePage({
         </Sheet>
       )}
 
-      {/* ═══ XABARNOMALAR SHEET ═══ */}
+      {/* NOTIFICATIONS SHEET */}
       {showNotifs && (
         <Sheet onClose={() => setShowNotifs(false)} maxH="85vh">
           <div style={{ fontSize:16, fontWeight:800, color:C.text, marginBottom:18,
@@ -543,42 +552,29 @@ export default function HomePage({
                 <div style={{ fontSize:12, fontWeight:700, color:C.text, marginBottom:2,
                               display:"flex", alignItems:"center", gap:5 }}>
                   <Package size={12} color={C.textSub} /> {o.productName}
-                  <span style={{ color:C.textMuted, fontWeight:500 }}>(ID: #{o.productId})</span>
+                  <span style={{ color:C.textMuted, fontWeight:500 }}>(ID: #{o.productPublicId || o.productId})</span>
                 </div>
 
                 <div style={{ fontSize:11, color:C.textSub, marginBottom:10,
                               display:"flex", alignItems:"center", gap:5 }}>
-                  <User size={11} /> <b>{o.buyerName}</b> sizning mahsulotingizni olmoqchi
+                  <User size={11} /> Xaridor (ID: <b>{o.buyerPublicId || "—"}</b>)
                 </div>
 
+                {/* NO delete button — auto handled by backend */}
                 {o.status==="paid" ? (
-                  <div style={{ display:"flex", gap:8 }}>
-                    <button onClick={() => setShowBuyer(o)}
-                      style={{ flex:1, padding:"10px", borderRadius:12, border:"none",
-                               background:"linear-gradient(135deg,#28A869,#1a8f50)",
-                               color:"white", fontSize:12, fontWeight:700,
-                               cursor:"pointer", fontFamily:"inherit",
-                               display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-                      <User size={14} /> Xaridor ma'lumotlari
-                    </button>
-                    {onDelete && (
-                      <button onClick={() => onDelete(o.productId)}
-                        style={{ padding:"10px 14px", borderRadius:12, border:"none",
-                                 background:"#FFF1F0", color:"#FF4D4F",
-                                 cursor:"pointer", fontFamily:"inherit",
-                                 display:"flex", alignItems:"center", justifyContent:"center" }}>
-                        <Trash2 size={15} />
-                      </button>
-                    )}
+                  <div style={{ padding:"10px", borderRadius:12,
+                                background:"#E8F8F0", color:"#28A869",
+                                fontSize:12, fontWeight:900, textAlign:"center" }}>
+                    ✅ To'lov qilingan — mahsulot sotildi
                   </div>
                 ) : (
-                  <button onClick={() => setShowPayment(o)}
-                    style={{ width:"100%", padding:"10px", borderRadius:12, border:"none",
-                             background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,
-                             color:"white", fontSize:12, fontWeight:700,
-                             cursor:"pointer", fontFamily:"inherit",
-                             display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-                    <CreditCard size={14} /> To'lov havolasini ko'rish
+                  <button
+                    onClick={() => { setShowPayment(o); setCardFrom(""); setNote(""); setShowNotifs(false); }}
+                    style={{ width:"100%", padding:"10px 12px", borderRadius:12,
+                              background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,
+                              border:"none", color:"white", fontSize:12, fontWeight:900,
+                              cursor:"pointer", fontFamily:"inherit" }}>
+                    💳 5% to'lovni yuborish va tasdiqlash
                   </button>
                 )}
               </div>
@@ -587,7 +583,7 @@ export default function HomePage({
         </Sheet>
       )}
 
-      {/* ═══ TO'LOV SHEET ═══ */}
+      {/* PAYMENT SHEET */}
       {showPayment && (
         <Sheet onClose={() => setShowPayment(null)} maxH="80vh">
           <div style={{ fontSize:16, fontWeight:800, color:C.text, marginBottom:18,
@@ -597,10 +593,6 @@ export default function HomePage({
 
           <div style={{ background:C.primaryLight, borderRadius:16, padding:"14px 16px",
                         marginBottom:14, border:`1px solid ${C.primaryBorder}` }}>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-              <span style={{ fontSize:11, color:C.textSub }}>Mahsulot ID</span>
-              <span style={{ fontSize:13, fontWeight:800, color:C.text }}>#{showPayment.productId}</span>
-            </div>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
               <span style={{ fontSize:11, color:C.textSub }}>Mahsulot narxi</span>
               <span style={{ fontSize:12, fontWeight:700, color:C.text }}>{showPayment.productPrice?.toLocaleString()} so'm</span>
@@ -615,7 +607,7 @@ export default function HomePage({
           </div>
 
           <div style={{ background:"#1C1C1E", borderRadius:16, padding:"16px", marginBottom:14 }}>
-            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", marginBottom:6, textTransform:"uppercase", letterSpacing:0.5 }}>Operator karta raqami</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", marginBottom:6, textTransform:"uppercase", letterSpacing:0.5 }}>Operator karta</div>
             <div style={{ fontSize:20, fontWeight:900, color:"white", letterSpacing:2, marginBottom:8 }}>{OPERATOR.card}</div>
             <div style={{ fontSize:11, color:"rgba(255,255,255,0.6)" }}>{OPERATOR.name}</div>
           </div>
@@ -635,58 +627,35 @@ export default function HomePage({
           </div>
 
           <div style={{ fontSize:11, color:C.textMuted, lineHeight:1.7, marginBottom:18,
-                        background:"#FFFBEB", borderRadius:12, padding:"10px 13px",
-                        border:"1px solid #FDE68A" }}>
+                        background:"#FFFBEB", borderRadius:12, padding:"10px 13px", border:"1px solid #FDE68A" }}>
             1. Yuqoridagi kartaga <b>{Math.round(showPayment.productPrice * 0.05).toLocaleString()} so'm</b> o'tkazing<br/>
             2. To'lov chekini <b>{OPERATOR.telegram}</b> ga yuboring<br/>
-            3. Operator xaridor ma'lumotlarini sizga ochib beradi
+            3. Siz tasdiqlagandan keyin bot xaridorga sotuvchining kontaktlarini ochadi
+          </div>
+
+          <div style={{ marginBottom:12 }}>
+            <Lbl>Sizning karta raqamingiz (ixtiyoriy)</Lbl>
+            <TInput value={cardFrom} onChange={(v) => setCardFrom(v)} placeholder="8600 0000 0000 0000" />
+          </div>
+          <div style={{ marginBottom:18 }}>
+            <Lbl>Izoh (ixtiyoriy)</Lbl>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="To'lov haqida qo'shimcha ma'lumot..." rows={2}
+              style={{ width:"100%", boxSizing:"border-box", border:`1.5px solid ${C.border}`,
+                       borderRadius:12, padding:"10px 14px", fontSize:13, resize:"none",
+                       outline:"none", background:C.bg, fontFamily:"inherit" }} />
           </div>
 
           <div style={{ display:"flex", gap:9 }}>
             <BtnGhost onClick={() => setShowPayment(null)}>Yopish</BtnGhost>
-            <BtnPrimary onClick={() => confirmPayment(showPayment.id)}>
-              <Check size={15} /> To'lov tasdiqlandi (demo)
+            <BtnPrimary onClick={() => confirmPayment(showPayment.id)} disabled={paying}>
+              <Check size={15} /> {paying ? "⏳ Yuborilmoqda..." : "To'lov yuborildi va tasdiqlash"}
             </BtnPrimary>
           </div>
         </Sheet>
       )}
 
-      {/* ═══ XARIDOR MA'LUMOTI SHEET ═══ */}
-      {showBuyer && (
-        <Sheet onClose={() => setShowBuyer(null)} maxH="65vh">
-          <div style={{ fontSize:16, fontWeight:800, color:C.text, marginBottom:6,
-                        display:"flex", alignItems:"center", gap:7 }}>
-            <User size={16} color={C.primaryDark} /> Xaridor ma'lumotlari
-          </div>
-          <div style={{ fontSize:11, color:C.textMuted, marginBottom:18 }}>
-            To'lov tasdiqlangani uchun quyidagi ma'lumotlar ochildi
-          </div>
-
-          <div style={{ background:"#E8F8F0", borderRadius:16, padding:"16px",
-                        border:"1px solid #A7F3D0", marginBottom:18 }}>
-            <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
-              <CheckCircle size={24} color="#28A869" />
-            </div>
-            {[
-              [User,  "Ism",        showBuyer.buyerName],
-              [Phone, "Telefon",    showBuyer.buyerPhone],
-              [Send,  "Telegram",   showBuyer.buyerTelegram],
-              [Hash,  "Mahsulot ID",`#${showBuyer.productId}`],
-            ].map(([Icon,l,v]) => (
-              <div key={l} style={{ display:"flex", justifyContent:"space-between",
-                                    padding:"9px 0", borderBottom:"1px solid rgba(0,0,0,0.06)" }}>
-                <span style={{ fontSize:12, color:"#065F46", display:"inline-flex", alignItems:"center", gap:5 }}>
-                  <Icon size={12} /> {l}
-                </span>
-                <span style={{ fontSize:13, fontWeight:800, color:"#064E3B" }}>{v}</span>
-              </div>
-            ))}
-          </div>
-          <BtnGhost onClick={() => setShowBuyer(null)}>Yopish</BtnGhost>
-        </Sheet>
-      )}
-
-      {/* ═══ ADD PRODUCT SHEET (4 steps) ═══ */}
+      {/* ADD PRODUCT SHEET */}
       {showAdd && (
         <Sheet onClose={closeAdd} maxH="92vh">
           <StepBar current={step} />
@@ -785,7 +754,7 @@ export default function HomePage({
             </>
           )}
 
-          {/* STEP 3 — Location */}
+          {/* STEP 3 — Location + Mahalla */}
           {step===3 && (
             <>
               <div style={{ fontSize:15, fontWeight:800, color:C.text, marginBottom:14 }}>
@@ -796,7 +765,7 @@ export default function HomePage({
               <Lbl>Viloyat / Shahar *</Lbl>
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>
                 {Object.keys(UZ).map(v => (
-                  <Pill key={v} active={form.viloyat===v} onClick={() => { f("viloyat")(v); f("tuman")(""); }}>{v}</Pill>
+                  <Pill key={v} active={form.viloyat===v} onClick={() => { f("viloyat")(v); f("tuman")(""); f("mahalla")(""); }}>{v}</Pill>
                 ))}
               </div>
               {form.viloyat && (
@@ -809,6 +778,12 @@ export default function HomePage({
                   </div>
                 </>
               )}
+              <Lbl>Mahalla (ixtiyoriy)</Lbl>
+              <TInput
+                placeholder="Mahalla nomi"
+                value={form.mahalla || ""}
+                onChange={f("mahalla")}
+              />
               <div style={{ display:"flex", gap:9 }}>
                 <BtnGhost onClick={() => setStep(2)}><ArrowLeft size={14} /> Orqaga</BtnGhost>
                 <BtnPrimary onClick={() => canStep4 && setStep(4)} disabled={!canStep4}>
@@ -826,38 +801,41 @@ export default function HomePage({
                 <CheckCircle size={16} color={C.primaryDark} /> Tasdiqlash
               </div>
 
+              {/* Pending notice */}
+              <div style={{ background:"#FFFBEB", border:"1px solid #FDE68A", borderRadius:14,
+                            padding:"12px 14px", marginBottom:14,
+                            display:"flex", alignItems:"center", gap:8 }}>
+                <Clock size={16} color="#D97706" style={{ flexShrink:0 }} />
+                <div style={{ fontSize:12, color:"#92400E" }}>
+                  <b>Diqqat:</b> E'lon qo'shilgandan keyin operator tekshiradi (30-60 daqiqa). Tasdiqlangach barchaga ko'rinadi.
+                </div>
+              </div>
+
               <div style={{ background:C.primaryLight, borderRadius:18, overflow:"hidden",
                             marginBottom:16, border:`1px solid ${C.primaryBorder}` }}>
-                {/* Carousel */}
                 <div style={{ position:"relative", width:"100%", height:180, overflow:"hidden", background:"#000" }}>
                   <img src={form.photos[addImgIdx]} alt="preview"
                     style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
-
-                  {/* Prev / Next */}
                   {form.photos.length > 1 && (<>
-                    <button onClick={() => setAddImgIdx(i => (i - 1 + form.photos.length) % form.photos.length)}
+                    <button onClick={() => setAddImgIdx(i => (i-1+form.photos.length)%form.photos.length)}
                       style={{ position:"absolute", left:8, top:"50%", transform:"translateY(-50%)",
                                width:28, height:28, borderRadius:"50%", border:"none",
                                background:"rgba(0,0,0,0.45)", color:"white", fontSize:16,
                                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
-                    <button onClick={() => setAddImgIdx(i => (i + 1) % form.photos.length)}
+                    <button onClick={() => setAddImgIdx(i => (i+1)%form.photos.length)}
                       style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)",
                                width:28, height:28, borderRadius:"50%", border:"none",
                                background:"rgba(0,0,0,0.45)", color:"white", fontSize:16,
                                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
-
-                    {/* Dots */}
                     <div style={{ position:"absolute", bottom:8, left:0, right:0,
                                   display:"flex", justifyContent:"center", alignItems:"center", gap:5 }}>
                       {form.photos.map((_, i) => (
                         <div key={i} onClick={() => setAddImgIdx(i)}
-                          style={{ width: i===addImgIdx ? 18 : 6, height:6, borderRadius:3,
-                                   background: i===addImgIdx ? "white" : "rgba(255,255,255,0.5)",
+                          style={{ width:i===addImgIdx?18:6, height:6, borderRadius:3,
+                                   background:i===addImgIdx?"white":"rgba(255,255,255,0.5)",
                                    transition:"width 0.2s", cursor:"pointer" }} />
                       ))}
                     </div>
-
-                    {/* Counter */}
                     <div style={{ position:"absolute", top:8, right:10, fontSize:11, fontWeight:700,
                                   color:"white", background:"rgba(0,0,0,0.45)", padding:"2px 7px", borderRadius:10 }}>
                       {addImgIdx+1}/{form.photos.length}
@@ -872,7 +850,9 @@ export default function HomePage({
                   </div>
                   <div style={{ fontSize:11, color:C.textSub, marginTop:2 }}>
                     <span style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
-                      <LocIcon size={11} color={C.textSub}/> {form.viloyat}{form.tuman?` › ${form.tuman}`:""}
+                      <LocIcon size={11} color={C.textSub}/>
+                      {form.viloyat}{form.tuman?` › ${form.tuman}`:""}
+                      {form.mahalla?` › ${form.mahalla}`:""}
                     </span>
                   </div>
                 </div>
@@ -880,7 +860,8 @@ export default function HomePage({
 
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:16 }}>
                 {[["Kategoriya",form.category],["Holat",form.condition],
-                  ["Miqdor",`${form.qty} ${form.unit}`],["Tuman",form.tuman||form.viloyat]].map(([k,v])=>(
+                  ["Miqdor",`${form.qty} ${form.unit}`],
+                  ["Mahalla",form.mahalla||form.tuman||form.viloyat]].map(([k,v])=>(
                   <div key={k} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:12, padding:"9px 11px" }}>
                     <div style={{ fontSize:9, color:C.textMuted, marginBottom:1 }}>{k}</div>
                     <div style={{ fontSize:11, fontWeight:700, color:C.text }}>{v}</div>
@@ -902,106 +883,62 @@ export default function HomePage({
         </Sheet>
       )}
 
-      {/* ═══ LIGHTBOX ═══ */}
+      {/* LIGHTBOX */}
       {lightbox && (
-        <div
-          style={{ position:"fixed", inset:0, background:"black", zIndex:500,
-                   display:"flex", alignItems:"center", justifyContent:"center",
-                   userSelect:"none", touchAction:"none" }}
-          onTouchStart={lbTouchStart}
-          onTouchMove={lbTouchMove}
-          onTouchEnd={lbTouchEnd}>
-
-          {/* Yopish */}
+        <div style={{ position:"fixed", inset:0, background:"black", zIndex:500,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      userSelect:"none", touchAction:"none" }}
+          onTouchStart={lbTouchStart} onTouchMove={lbTouchMove} onTouchEnd={lbTouchEnd}>
           <button onClick={closeLb}
             style={{ position:"absolute", top:16, right:16, width:40, height:40,
                      borderRadius:"50%", border:"none", background:"rgba(255,255,255,0.18)",
-                     color:"white", cursor:"pointer", fontSize:22, zIndex:6,
+                     color:"white", cursor:"pointer", zIndex:6,
                      display:"flex", alignItems:"center", justifyContent:"center" }}>
             <X size={20} />
           </button>
-
-          {/* Rasm soni */}
           {lightbox.photos.length > 1 && (
             <div style={{ position:"absolute", top:20, left:"50%", transform:"translateX(-50%)",
                           color:"rgba(255,255,255,0.85)", fontSize:12, fontWeight:700,
                           background:"rgba(0,0,0,0.45)", padding:"3px 12px", borderRadius:20, zIndex:6 }}>
-              {lightbox.idx + 1} / {lightbox.photos.length}
+              {lightbox.idx+1} / {lightbox.photos.length}
             </div>
           )}
-
-          {/* Rasm — ikki marta bosib zoom */}
-          <img
-            src={lightbox.photos[lightbox.idx]}
-            alt=""
-            onDoubleClick={() => setLbZoom(z => z > 1 ? 1 : 2.5)}
+          <img src={lightbox.photos[lightbox.idx]} alt=""
+            onDoubleClick={() => setLbZoom(z => z>1?1:2.5)}
             style={{ maxWidth:"100%", maxHeight:"100dvh", objectFit:"contain",
                      transform:`scale(${lbZoom})`, transformOrigin:"center",
-                     transition:"transform 0.2s" }}
-          />
-
-          {/* Prev / Next */}
+                     transition:"transform 0.2s" }} />
           {lightbox.photos.length > 1 && (
             <>
               <button onClick={lbPrev}
                 style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)",
                          width:44, height:44, borderRadius:"50%", border:"none",
                          background:"rgba(255,255,255,0.18)", color:"white", cursor:"pointer",
-                         fontSize:26, display:"flex", alignItems:"center", justifyContent:"center", zIndex:6 }}>
-                ‹
-              </button>
+                         fontSize:26, display:"flex", alignItems:"center", justifyContent:"center", zIndex:6 }}>‹</button>
               <button onClick={lbNext}
                 style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)",
                          width:44, height:44, borderRadius:"50%", border:"none",
                          background:"rgba(255,255,255,0.18)", color:"white", cursor:"pointer",
-                         fontSize:26, display:"flex", alignItems:"center", justifyContent:"center", zIndex:6 }}>
-                ›
-              </button>
-
-              {/* Dots — ulanib ketuvchi chiziq */}
-              <div style={{ position:"absolute", bottom:30, left:"50%", transform:"translateX(-50%)",
-                            display:"flex", alignItems:"center", gap:0, zIndex:6 }}>
-                {lightbox.photos.map((_, i) => (
-                  <div key={i} style={{ display:"flex", alignItems:"center" }}>
-                    {i > 0 && (
-                      <div style={{ width:16, height:2,
-                                    background: i <= lightbox.idx ? "white" : "rgba(255,255,255,0.3)",
-                                    transition:"background 0.25s" }} />
-                    )}
-                    <div onClick={() => setLightbox(lb => ({ ...lb, idx:i }))}
-                      style={{ width: i === lightbox.idx ? 22 : 8,
-                               height: i === lightbox.idx ? 22 : 8,
-                               borderRadius:"50%",
-                               background: i === lightbox.idx ? "white" : "rgba(255,255,255,0.35)",
-                               cursor:"pointer", transition:"all 0.25s",
-                               border: i === lightbox.idx ? "2px solid rgba(255,255,255,0.6)" : "none" }} />
-                  </div>
-                ))}
-              </div>
+                         fontSize:26, display:"flex", alignItems:"center", justifyContent:"center", zIndex:6 }}>›</button>
             </>
           )}
         </div>
       )}
 
-      {/* ═══ BOTTOM NAV — faqat guest uchun (loggedIn uchun App.jsx dan keladi) ═══ */}
+      {/* Guest bottom nav */}
       {!loggedIn && (
         <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)",
                       width:"100%", maxWidth:430, background:"rgba(255,255,255,0.96)",
                       backdropFilter:"blur(16px)", borderTop:`1px solid ${C.border}`,
                       boxShadow:"0 -2px 14px rgba(0,0,0,0.06)",
-                      display:"flex", alignItems:"center",
-                      padding:"10px 0 20px", zIndex:30 }}>
-
-          <div onClick={() => onNavChange("home")}
-            style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
+                      display:"flex", alignItems:"center", padding:"10px 0 20px", zIndex:30 }}>
+          <div onClick={() => onNavChange("home")} style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
             <div style={{ display:"flex", justifyContent:"center" }}>
               <Home size={22} color={C.primaryDark} />
             </div>
             <div style={{ fontSize:9, marginTop:3, color:C.primaryDark, fontWeight:700 }}>Bosh</div>
           </div>
-
-          <div onClick={openAdd}
-            style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer" }}>
+          <div onClick={openAdd} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer" }}>
             <div style={{ width:52, height:52, borderRadius:17,
                           background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,
                           display:"flex", alignItems:"center", justifyContent:"center",
@@ -1011,9 +948,7 @@ export default function HomePage({
             </div>
             <div style={{ fontSize:9, marginTop:4, color:C.textMuted, fontWeight:400 }}>E'lon</div>
           </div>
-
-          <div onClick={requireAuth}
-            style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
+          <div onClick={requireAuth} style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
             <div style={{ width:30, height:30, borderRadius:"50%", margin:"0 auto",
                           overflow:"hidden", border:`2.5px solid ${C.border}`,
                           background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,

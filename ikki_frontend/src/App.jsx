@@ -1,21 +1,59 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import LoginPage from "./pages/LoginPage";
 import HomePage from "./pages/HomePage";
 import ProfilePage from "./pages/ProfilePage";
-import PaymentPage from "./pages/PaymentPage";
+import OperatorPage from "./pages/OperatorPage";
 import { C } from "./constants";
 import { getToken, clearAuth, productsAPI, offersAPI, authAPI } from "./services/api";
 import { Home, Plus } from "lucide-react";
 
-// Saved user from localStorage (for instant load without flicker)
+const OPERATOR_PHONES = ["331350206"];
+const phoneCore = (v) => {
+  const d = String(v || "").replace(/\D/g, "");
+  return d.startsWith("998") ? d.slice(-9) : d.slice(-9);
+};
+const isOperator = (user) => user && (
+  OPERATOR_PHONES.includes(phoneCore(user.phone)) || user.role === "operator"
+);
+
 const savedUser = () => {
   try { return JSON.parse(localStorage.getItem("rm_user")) || null; }
   catch { return null; }
 };
 
 function hasTgParams() {
-  const p = new URLSearchParams(window.location.search);
-  return p.has("tgToken") || p.get("register") === "1";
+  return new URLSearchParams(window.location.search).has("tgToken");
+}
+
+// ── Loading splash (qurilish tematikasi) ─────────────────────────
+function LoadingSplash() {
+  return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
+                  height:"100vh", background:C.bg, flexDirection:"column", gap:14 }}>
+      <div style={{ width:72, height:72, borderRadius:22,
+                    background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:34, boxShadow:`0 8px 24px rgba(244,137,74,0.4)`,
+                    animation:"pulse 1.5s ease-in-out infinite" }}>
+        🏗
+      </div>
+      <div style={{ fontSize:18, fontWeight:800, color:C.text, fontFamily:"'Nunito','Segoe UI',sans-serif" }}>
+        ReQurilish
+      </div>
+      <div style={{ display:"flex", gap:6 }}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{
+            width:8, height:8, borderRadius:"50%", background:C.primaryDark,
+            animation:`bounce 1.2s ${i*0.2}s ease-in-out infinite`,
+          }} />
+        ))}
+      </div>
+      <style>{`
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+        @keyframes bounce { 0%,100%{transform:translateY(0);opacity:.4} 50%{transform:translateY(-8px);opacity:1} }
+      `}</style>
+    </div>
+  );
 }
 
 export default function App() {
@@ -27,13 +65,34 @@ export default function App() {
   const [homeAction, setHomeAction] = useState(null);
   const [loading,    setLoading]    = useState(!!savedUser());
   const [offline,    setOffline]    = useState(false);
+  const pollRef = useRef(null);
 
   const loggedIn = !!user && !!getToken();
   const guestUser = user || { id: null, name: "Mehmon", phone: "", telegram: "", avatar: null };
 
-  // ── On mount: verify token + load data ──────────────────────────
+  const loadData = async () => {
+    try {
+      const prods = await productsAPI.getAll();
+      setOffline(false);
+      setProducts(prods);
+      if (getToken()) {
+        const [my, offs] = await Promise.all([
+          productsAPI.getMy(),
+          offersAPI.getReceived(),
+        ]);
+        setMyProducts(my);
+        setOffers(offs);
+      } else {
+        setMyProducts([]);
+        setOffers([]);
+      }
+    } catch (e) {
+      if (e.offline) setOffline(true);
+    }
+  };
+
+  // On mount: verify token + load data
   useEffect(() => {
-    // Har doim Home uchun mahsulotlarni yuklaymiz (guest ham ko'rsin)
     (async () => {
       try {
         if (getToken()) {
@@ -51,27 +110,29 @@ export default function App() {
     })();
   }, []);
 
-  const loadData = async () => {
-    try {
-      const prods = await productsAPI.getAll();
-      setOffline(false);
-      setProducts(prods);
+  // Real-time polling: 10s interval
+  useEffect(() => {
+    pollRef.current = setInterval(loadData, 3_000);
+    return () => clearInterval(pollRef.current);
+  }, []);
 
-      if (getToken()) {
-        const [my, offs] = await Promise.all([
-          productsAPI.getMy(),
-          offersAPI.getReceived(),
-        ]);
-        setMyProducts(my);
-        setOffers(offs);
-      } else {
-        setMyProducts([]);
-        setOffers([]);
-      }
-    } catch (e) {
-      if (e.offline) setOffline(true);
-    }
-  };
+  // visibilitychange — tab qaytganda darhol yangilansin
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadData();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
+  // Telegram WebApp "activated" event
+  useEffect(() => {
+    const twa = window.Telegram?.WebApp;
+    if (!twa) return;
+    const onActivated = () => loadData();
+    twa.onEvent?.("activated", onActivated);
+    return () => twa.offEvent?.("activated", onActivated);
+  }, []);
 
   const handleLogin = async (userData) => {
     setUser(userData);
@@ -85,62 +146,43 @@ export default function App() {
     setMyProducts([]);
     setOffers([]);
     setNav("home");
-    // Guest uchun public mahsulotlarni qayta yuklash
-    try {
-      const prods = await productsAPI.getAll();
-      setProducts(prods);
-    } catch { /* silent */ }
+    try { setProducts(await productsAPI.getAll()); } catch { /* silent */ }
   };
 
-  const handleAddProduct = async (newProd) => {
-    // Called from HomePage after successful API create
+  const handleAddProduct = (newProd) => {
     setMyProducts(prev => [newProd, ...prev]);
-    // Products feed already excludes own items — no need to add to products[]
   };
 
   const handleDeleteProduct = async (id) => {
     try {
       await productsAPI.remove(id);
-      setMyProducts(prev => prev.filter(p => p.id !== id));
-    } catch { /* silent */ }
+      // Mark deleted locally; ProfilePage filter will hide it
+      setMyProducts(prev => prev.map(p => p.id === id ? { ...p, status: "deleted" } : p));
+    } catch (e) {
+      console.error("Delete failed:", e.message);
+    }
   };
 
-  const handleUpdateUser = async (updated) => {
+  const handleUpdateUser = (updated) => {
     setUser(updated);
     localStorage.setItem("rm_user", JSON.stringify(updated));
   };
 
-  // ── Loading splash ───────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-                    height:"100vh", background:C.bg, flexDirection:"column", gap:12 }}>
-        <div style={{ width:60, height:60, borderRadius:18,
-                      background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,
-                      display:"flex", alignItems:"center", justifyContent:"center", fontSize:28 }}>♻️</div>
-        <div style={{ fontSize:13, color:C.textMuted, fontFamily:"'Nunito','Segoe UI',sans-serif" }}>
-          Yuklanmoqda...
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <LoadingSplash />;
 
-  // ── Login screen ─────────────────────────────────────────────────
   if (!loggedIn && nav === "login") {
     return <LoginPage onLogin={handleLogin} />;
   }
 
-  // ── Bottom nav (barcha sahifalarda ko'rinadi) ────────────────────
   const BottomNav = () => (
     <div style={{
       position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)",
-      width:"100%", maxWidth:430, background:"rgba(255,255,255,0.96)",
+      width:"100%", maxWidth:430, background:"rgba(255,255,255,0.97)",
       backdropFilter:"blur(16px)", borderTop:`1px solid ${C.border}`,
       boxShadow:"0 -2px 14px rgba(0,0,0,0.06)",
       display:"flex", alignItems:"center",
       padding:"10px 0 20px", zIndex:30,
     }}>
-      {/* Bosh sahifa */}
       <div onClick={() => setNav("home")}
         style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
         <div style={{ display:"flex", justifyContent:"center" }}>
@@ -151,7 +193,6 @@ export default function App() {
           fontWeight: nav==="home" ? 800 : 400 }}>Bosh</div>
       </div>
 
-      {/* ➕ E'lon qo'shish */}
       <div onClick={() => { setHomeAction("openAdd"); setNav("home"); }}
         style={{ flex:1, display:"flex", flexDirection:"column",
                  alignItems:"center", cursor:"pointer" }}>
@@ -165,18 +206,18 @@ export default function App() {
         <div style={{ fontSize:9, marginTop:4, color:C.textMuted, fontWeight:400 }}>E'lon</div>
       </div>
 
-      {/* 👤 Profil */}
       <div onClick={() => setNav("profile")}
         style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
         <div style={{ width:30, height:30, borderRadius:"50%", margin:"0 auto",
                       overflow:"hidden",
                       border:`2.5px solid ${nav==="profile" ? C.primaryDark : C.border}`,
-                      background: user.avatar ? "transparent" : `linear-gradient(135deg,${C.primary},${C.primaryDark})`,
+                      background: (loggedIn && user?.avatar) ? "transparent"
+                        : `linear-gradient(135deg,${C.primary},${C.primaryDark})`,
                       display:"flex", alignItems:"center", justifyContent:"center" }}>
-          {user.avatar
+          {loggedIn && user?.avatar
             ? <img src={user.avatar} alt="av" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
             : <span style={{ fontSize:11, fontWeight:900, color:"white" }}>
-                {(user.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2)}
+                {((loggedIn ? user?.name : "M") || "?").split(" ").map(w=>w[0]).join("").slice(0,2)}
               </span>
           }
         </div>
@@ -189,7 +230,6 @@ export default function App() {
 
   return (
     <div style={{ fontFamily:"'Nunito','Segoe UI',sans-serif", background:C.bg }}>
-      {/* Server offline banner */}
       {offline && (
         <div style={{ position:"fixed", top:0, left:"50%", transform:"translateX(-50%)",
                       width:"100%", maxWidth:430, zIndex:999,
@@ -201,64 +241,59 @@ export default function App() {
             <span style={{ fontSize:16 }}>🔴</span>
             <div>
               <div style={{ fontSize:12, fontWeight:800 }}>Server ishlamayapti</div>
-              <div style={{ fontSize:10, opacity:0.85 }}>Backend server yoqilmagan yoki ulanish yo'q</div>
+              <div style={{ fontSize:10, opacity:0.85 }}>Ulanish yo'q</div>
             </div>
           </div>
           <button onClick={loadData}
             style={{ background:"rgba(255,255,255,0.2)", border:"none", color:"white",
                      borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:700,
-                     cursor:"pointer", whiteSpace:"nowrap" }}>
-            Qayta urinish
+                     cursor:"pointer" }}>
+            Qayta
           </button>
         </div>
       )}
+
+      {/* Guest: faqat home */}
       {!loggedIn && nav === "home" && (
         <HomePage
-          user={guestUser}
-          products={products}
-          setProducts={setProducts}
-          offers={offers}
-          setOffers={setOffers}
-          onNavChange={setNav}
-          homeAction={homeAction}
-          setHomeAction={setHomeAction}
-          onProductAdded={handleAddProduct}
-          loggedIn={false}
+          user={guestUser} products={products} setProducts={setProducts}
+          offers={offers} setOffers={setOffers}
+          onNavChange={setNav} homeAction={homeAction} setHomeAction={setHomeAction}
+          onProductAdded={handleAddProduct} loggedIn={false}
           onRequireAuth={() => setNav("login")}
         />
       )}
-
       {!loggedIn && nav !== "home" && nav !== "login" && (
         <LoginPage onLogin={handleLogin} />
       )}
 
+      {/* Logged in: operator */}
+      {loggedIn && nav === "operator" && (
+        <OperatorPage onBack={() => setNav("profile")} user={user} />
+      )}
+
+      {/* Logged in: profile */}
       {loggedIn && nav === "profile" && (
         <>
           <ProfilePage
-            user={user}
-            setUser={handleUpdateUser}
-            myProducts={myProducts}
-            onDelete={handleDeleteProduct}
-            onLogout={handleLogout}
+            user={user} setUser={handleUpdateUser}
+            myProducts={myProducts} onDelete={handleDeleteProduct}
+            onLogout={handleLogout} isOperator={isOperator(user)}
+            onOpenOperator={() => setNav("operator")}
           />
           <BottomNav />
         </>
       )}
 
-      {loggedIn && (nav === "home" || (nav !== "profile")) && (
+      {/* Logged in: home (and any unmatched nav) */}
+      {loggedIn && nav !== "operator" && nav !== "profile" && (
         <>
           <HomePage
-            user={user}
-            products={products}
-            setProducts={setProducts}
-            offers={offers}
-            setOffers={setOffers}
-            onNavChange={setNav}
-            homeAction={homeAction}
-            setHomeAction={setHomeAction}
-            onProductAdded={handleAddProduct}
-            onDelete={handleDeleteProduct}
-            loggedIn={true}
+            user={user} products={products} setProducts={setProducts}
+            offers={offers} setOffers={setOffers}
+            onNavChange={setNav} homeAction={homeAction} setHomeAction={setHomeAction}
+            onProductAdded={handleAddProduct} onDelete={handleDeleteProduct}
+            isOperator={isOperator(user)} loggedIn={true}
             onRequireAuth={() => setNav("login")}
           />
           <BottomNav />

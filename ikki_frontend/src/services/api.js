@@ -1,12 +1,16 @@
-// Production da VITE_API_URL, development da Vite proxy orqali /api
-const BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
+const PROD_API_FALLBACK = "https://requrilish.onrender.com";
+const RAW_BASE = import.meta.env.VITE_API_URL
+  || (import.meta.env.PROD ? PROD_API_FALLBACK : "");
+const BASE = RAW_BASE
+  ? `${RAW_BASE.replace(/\/+$/, "").replace(/\/api$/i, "")}/api`
   : "/api";
 
-// ─── Token helpers ────────────────────────────────────────────────
-export const getToken  = ()    => localStorage.getItem("rm_token");
-export const setToken  = (t)   => localStorage.setItem("rm_token", t);
-export const clearAuth = ()    => { localStorage.removeItem("rm_token"); localStorage.removeItem("rm_user"); };
+export const getToken  = ()  => localStorage.getItem("rm_token");
+export const setToken  = (t) => localStorage.setItem("rm_token", t);
+export const clearAuth = ()  => {
+  localStorage.removeItem("rm_token");
+  localStorage.removeItem("rm_user");
+};
 
 const headers = (extra = {}) => ({
   "Content-Type": "application/json",
@@ -14,7 +18,6 @@ const headers = (extra = {}) => ({
   ...extra,
 });
 
-// Tarmoq xatosini (ECONNREFUSED, offline) ushlash
 const apiFetch = (url, opts) =>
   fetch(url, opts).catch(() => {
     const err = new Error("SERVER_OFFLINE");
@@ -30,47 +33,103 @@ const handle = async (res) => {
 
 // ─── AUTH ─────────────────────────────────────────────────────────
 export const authAPI = {
-  // Telefon raqamga kod yuborish (console.log da ko'rinadi)
   sendCode: (phone) =>
     apiFetch(`${BASE}/auth/send-code`, { method: "POST", headers: headers(), body: JSON.stringify({ phone }) }).then(handle),
-
   register: (body) =>
     apiFetch(`${BASE}/auth/register`, { method: "POST", headers: headers(), body: JSON.stringify(body) }).then(handle),
-
   login: (body) =>
     apiFetch(`${BASE}/auth/login`, { method: "POST", headers: headers(), body: JSON.stringify(body) }).then(handle),
-
   me: () =>
     apiFetch(`${BASE}/auth/me`, { headers: headers() }).then(handle),
-
   updateMe: (body) =>
     apiFetch(`${BASE}/auth/me`, { method: "PUT", headers: headers(), body: JSON.stringify(body) }).then(handle),
-
-  // Telegram bot yuborgan 1 martalik token orqali kirish
   loginWithTgToken: (token) =>
     apiFetch(`${BASE}/auth/tg-token/${token}`, { headers: headers() }).then(handle),
 };
 
+// ─── OPERATOR ─────────────────────────────────────────────────────
+export const operatorAPI = {
+  // Foydalanuvchilar
+  getUsers: (q = "") =>
+    apiFetch(`${BASE}/operator/users${q ? "?q=" + encodeURIComponent(q) : ""}`, { headers: headers() }).then(handle),
+  deleteUser: (id) =>
+    apiFetch(`${BASE}/operator/users/${id}`, { method: "DELETE", headers: headers() }).then(handle),
+  blockUser: (id) =>
+    apiFetch(`${BASE}/operator/users/${id}/block`, { method: "PUT", headers: headers() }).then(handle),
+  unblockUser: (id) =>
+    apiFetch(`${BASE}/operator/users/${id}/unblock`, { method: "PUT", headers: headers() }).then(handle),
+  deposit: (phone, amount) =>
+    apiFetch(`${BASE}/operator/deposit`, { method: "POST", headers: headers(), body: JSON.stringify({ phone, amount }) }).then(handle),
+
+  // Postlar
+  getPendingPosts: () =>
+    apiFetch(`${BASE}/operator/pending-posts`, { headers: headers() }).then(handle),
+  getProducts: (q = "", status = "") => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (status) params.set("status", status);
+    const qs = params.toString();
+    return apiFetch(`${BASE}/operator/products${qs ? "?" + qs : ""}`, { headers: headers() }).then(handle);
+  },
+  approvePost: (id) =>
+    apiFetch(`${BASE}/operator/posts/${id}/approve`, { method: "PUT", headers: headers() }).then(handle),
+  rejectPost: (id, reason) =>
+    apiFetch(`${BASE}/operator/posts/${id}/reject`, { method: "PUT", headers: headers(), body: JSON.stringify({ reason }) }).then(handle),
+  hidePost: (id) =>
+    apiFetch(`${BASE}/operator/posts/${id}/hide`, { method: "PUT", headers: headers() }).then(handle),
+  showPost: (id) =>
+    apiFetch(`${BASE}/operator/posts/${id}/show`, { method: "PUT", headers: headers() }).then(handle),
+  deletePost: (id) =>
+    apiFetch(`${BASE}/operator/posts/${id}`, { method: "DELETE", headers: headers() }).then(handle),
+
+  // To'lovlar
+  getPayments: () =>
+    apiFetch(`${BASE}/operator/payments`, { headers: headers() }).then(handle),
+  confirmPayment: (offerId) =>
+    apiFetch(`${BASE}/operator/payments/${offerId}/confirm`, { method: "PUT", headers: headers() }).then(handle),
+
+  // Statistika
+  getStats: () =>
+    apiFetch(`${BASE}/operator/stats`, { headers: headers() }).then(handle),
+
+  getPendingOffers: () =>
+    apiFetch(`${BASE}/operator/pending-offers`, { headers: headers() }).then(handle),
+  manualConfirm: (offerId) =>
+    apiFetch(`${BASE}/operator/manual-confirm/${offerId}`, { method: "POST", headers: headers() }).then(handle),
+
+  withdraw: (phone, amount) =>
+    apiFetch(`${BASE}/operator/withdraw`, { method: "POST", headers: headers(), body: JSON.stringify({ phone, amount }) }).then(handle),
+
+  // Operator management
+  getOperators: () =>
+    apiFetch(`${BASE}/operator/operators`, { headers: headers() }).then(handle),
+  addOperator: (identifier) =>
+    apiFetch(`${BASE}/operator/operators`, { method: "POST", headers: headers(), body: JSON.stringify({ identifier }) }).then(handle),
+  removeOperator: (id) =>
+    apiFetch(`${BASE}/operator/operators/${id}`, { method: "DELETE", headers: headers() }).then(handle),
+
+  // Legacy
+  setUserBlocked: (id, blocked) =>
+    blocked ? operatorAPI.blockUser(id) : operatorAPI.unblockUser(id),
+  deleteProduct: (id) => operatorAPI.deletePost(id),
+  setProductActive: (id, active) =>
+    active ? operatorAPI.showPost(id) : operatorAPI.hidePost(id),
+};
+
 // ─── PRODUCTS ─────────────────────────────────────────────────────
 export const productsAPI = {
-  // Barcha mahsulotlar (o'zinikidan tashqari)
   getAll: (params = {}) => {
     const qs = new URLSearchParams(
       Object.fromEntries(Object.entries(params).filter(([, v]) => v))
     ).toString();
     return apiFetch(`${BASE}/products${qs ? "?" + qs : ""}`, { headers: headers() }).then(handle);
   },
-
-  // Faqat o'z mahsulotlari
   getMy: () =>
     apiFetch(`${BASE}/products/my`, { headers: headers() }).then(handle),
-
   create: (body) =>
     apiFetch(`${BASE}/products`, { method: "POST", headers: headers(), body: JSON.stringify(body) }).then(handle),
-
   update: (id, body) =>
     apiFetch(`${BASE}/products/${id}`, { method: "PUT", headers: headers(), body: JSON.stringify(body) }).then(handle),
-
   remove: (id) =>
     apiFetch(`${BASE}/products/${id}`, { method: "DELETE", headers: headers() }).then(handle),
 };
@@ -79,32 +138,24 @@ export const productsAPI = {
 export const offersAPI = {
   send: (productId, message = "") =>
     apiFetch(`${BASE}/offers`, { method: "POST", headers: headers(), body: JSON.stringify({ productId, message }) }).then(handle),
-
   getReceived: () =>
     apiFetch(`${BASE}/offers`, { headers: headers() }).then(handle),
-
   getSent: () =>
     apiFetch(`${BASE}/offers/sent`, { headers: headers() }).then(handle),
-
   markPaid: (id) =>
     apiFetch(`${BASE}/offers/${id}/paid`, { method: "PUT", headers: headers() }).then(handle),
 };
 
-// ─── PAYMENTS (PostgreSQL) ─────────────────────────────────────────
+// ─── PAYMENTS ─────────────────────────────────────────────────────
 export const paymentsAPI = {
-  // To'lov yuborish (buyer)
   send: (body) =>
     apiFetch(`${BASE}/payments`, { method: "POST", headers: headers(), body: JSON.stringify(body) }).then(handle),
-
-  // To'lovni tasdiqlash (seller)
   confirm: (offerId) =>
     apiFetch(`${BASE}/payments/${offerId}/confirm`, { method: "PUT", headers: headers() }).then(handle),
-
-  // To'lovlar tarixi
+  balancePay: (offerId) =>
+    apiFetch(`${BASE}/payments/balance-pay`, { method: "POST", headers: headers(), body: JSON.stringify({ offerId }) }).then(handle),
   my: () =>
     apiFetch(`${BASE}/payments/my`, { headers: headers() }).then(handle),
-
-  // Operator karta ma'lumotlari
   info: () =>
     apiFetch(`${BASE}/payments/info`, { headers: headers() }).then(handle),
 };
