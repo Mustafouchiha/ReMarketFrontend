@@ -22,7 +22,10 @@ const savedUser = () => {
 };
 
 function hasTgParams() {
-  return new URLSearchParams(window.location.search).has("tgToken");
+  const p = new URLSearchParams(window.location.search);
+  if (p.has("tgToken") || p.get("register") === "1") return true;
+  // Inside Telegram Mini App → always try auto-login via initData
+  return !!window.Telegram?.WebApp?.initData;
 }
 
 // ── Loading splash (qurilish tematikasi) ─────────────────────────

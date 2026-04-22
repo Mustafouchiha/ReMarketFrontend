@@ -11,7 +11,6 @@ import {
   Phone,
   Wallet,
   History,
-  Package,
   FileText,
 } from "lucide-react";
 
@@ -79,17 +78,6 @@ export default function PaymentPage({ user }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  // ── To'lovni tasdiqlash (seller) — bu endi modal-submit ichida avtomatik bo'ladi ──
-  const confirmPayment = async (offerId) => {
-    try {
-      await paymentsAPI.confirm(offerId);
-      showToast("To'lov tasdiqlandi ✅");
-      await load();
-    } catch (e) {
-      showToast(e.message, false);
-    }
-  };
 
   // ── Balansdan 5% to'lash (seller modal) ─────────────────────────
   const submitPayment = async () => {
