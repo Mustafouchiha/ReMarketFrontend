@@ -30,7 +30,7 @@ export default function LoginPage({ onLogin }) {
   const timeoutRef = useRef(null);
 
   useEffect(() => {
-    const params  = new URLSearchParams(window.location.search);
+    const params   = new URLSearchParams(window.location.search);
     const tgToken  = params.get("tgToken");
     const tgPhone  = params.get("phone");
     const tgName   = params.get("name");
@@ -40,37 +40,46 @@ export default function LoginPage({ onLogin }) {
 
     window.history.replaceState({}, "", window.location.pathname);
 
-    // Auto-login via one-time token (existing users via bot)
-    if (tgToken) {
+    const autoLogin = (promise) => {
       setLoading(true);
       timeoutRef.current = setTimeout(() => setLoading(false), 10000);
-      authAPI.loginWithTgToken(tgToken)
+      promise
         .then((data) => {
           clearTimeout(timeoutRef.current);
           setToken(data.token);
           localStorage.setItem("rm_user", JSON.stringify(data.user));
           onLogin(data.user);
         })
-        .catch(() => { clearTimeout(timeoutRef.current); setLoading(false); });
+        .catch((e) => {
+          clearTimeout(timeoutRef.current);
+          setLoading(false);
+          if (e?.needBot) setNeedBot(true);
+        });
+    };
+
+    // 1. Bot yuborgan bir martalik token
+    if (tgToken) {
+      autoLogin(authAPI.loginWithTgToken(tgToken));
       return () => clearTimeout(timeoutRef.current);
     }
 
-    // Auto-register new user from bot redirect
+    // 2. Bot yo'naltirgan yangi foydalanuvchi ro'yxati
     if (isReg && tgPhone && tgChatId) {
       const digits = tgPhone.replace(/\D/g, "").slice(-9);
-      setLoading(true);
-      authAPI.register({
+      autoLogin(authAPI.register({
         name: tgName || "Foydalanuvchi",
         phone: digits,
         telegram: tgUser || "",
         tgChatId,
-      })
-        .then((data) => {
-          setToken(data.token);
-          localStorage.setItem("rm_user", JSON.stringify(data.user));
-          onLogin(data.user);
-        })
-        .catch(() => setLoading(false));
+      }));
+      return () => clearTimeout(timeoutRef.current);
+    }
+
+    // 3. Telegram Mini App ichida — initData bilan avtomatik kirish
+    const initData = window.Telegram?.WebApp?.initData;
+    if (initData) {
+      autoLogin(authAPI.tgInit(initData));
+      return () => clearTimeout(timeoutRef.current);
     }
   }, []);
 
