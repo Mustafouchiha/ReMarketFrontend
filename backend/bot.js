@@ -50,48 +50,60 @@ function getBot() {
 
     bot.on("contact", async (ctx) => {
       const firstName = ctx.from.first_name || "";
-      const tgChatId = ctx.from.id;
-      const rawPhone = ctx.message.contact.phone_number.replace(/\D/g, "");
-      const phone = rawPhone.startsWith("998") ? rawPhone.slice(3) : rawPhone;
+      const tgChatId  = ctx.from.id;
+      const rawPhone  = ctx.message.contact.phone_number.replace(/\D/g, "");
+      const phone     = rawPhone.startsWith("998") ? rawPhone.slice(3) : rawPhone;
 
       try {
         let user = await User.findOne({ phone });
         let appUrl;
+        let isNew = false;
 
         if (user) {
+          // Mavjud user — tg_chat_id yangilansin
           if (String(user.tg_chat_id) !== String(tgChatId)) {
             user = await User.findByIdAndUpdate(user.id, { tg_chat_id: tgChatId }) || user;
           }
           const token = await createToken(user.id);
           appUrl = `${MINI_APP_URL()}?tgToken=${token}`;
         } else {
+          // Yangi user — ro'yxatdan o'tish URL
+          isNew = true;
           const tgUsername = ctx.from.username ? `@${ctx.from.username}` : "";
           const params = new URLSearchParams({
-            phone, tgChatId: String(tgChatId),
-            name: firstName, telegram: tgUsername, register: "1",
+            phone,
+            tgChatId: String(tgChatId),
+            name:     firstName,
+            telegram: tgUsername,
+            register: "1",
           });
           appUrl = `${MINI_APP_URL()}?${params.toString()}`;
         }
 
-        // Avval klaviaturani yashiramiz
+        // Klaviaturani yashirish
         await ctx.reply("✅", { reply_markup: { remove_keyboard: true } });
 
-        const isNew = !user;
-        await ctx.reply(
-          isNew
-            ? `Salom, ${firstName}! 👋\n\nSiz yangi foydalanuvchisiz.\nQuyidagi tugmani bosing:`
-            : `Salom, ${firstName}! ✅\n\nQuyidagi tugmani bosib kiring:`,
-          {
-            reply_markup: {
-              inline_keyboard: [[
-                { text: "🏗 ReQurilish'ga kirish", web_app: { url: appUrl } },
-              ]],
-            },
-          }
-        );
+        const text = isNew
+          ? `Salom, ${firstName}! 👋\n\nSiz yangi foydalanuvchisiz.\nQuyidagi havola orqali ro'yxatdan o'ting:`
+          : `Salom, ${firstName}! ✅\n\nQuyidagi havola orqali kiring:`;
+
+        // web_app button + oddiy URL button (ikkalasi ham)
+        await ctx.reply(text, {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "🏗 ReQurilish'ga kirish", web_app: { url: appUrl } },
+            ], [
+              { text: "🔗 Brauzerda ochish", url: appUrl },
+            ]],
+          },
+        });
+
       } catch (e) {
-        console.error("Bot contact handler xatosi:", e.message);
-        ctx.reply("Xatolik yuz berdi. /start bosing.");
+        console.error("Bot contact handler xatosi:", e.message, e.stack);
+        // Debug: foydalanuvchiga ham ko'rsatamiz
+        ctx.reply(
+          `⚠️ Vaqtinchalik xato: ${e.message}\n\n/start bosib qayta urinib ko'ring.`
+        ).catch(() => {});
       }
     });
 
