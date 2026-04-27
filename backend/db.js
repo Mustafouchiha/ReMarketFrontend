@@ -42,23 +42,25 @@ async function query(text, params) {
   return getPool().query(text, params);
 }
 
-// Eski sxemani tekshirish — phone ustuni yo'q bo'lsa hammasini o'chirib qayta yaratamiz
+// Eski sxemani tekshirish — alohida DROP querylarda (pg multi-statement ishlamaydi)
 async function checkAndResetSchema(p) {
   try {
     await p.query("SELECT phone FROM users LIMIT 1");
-    // phone ustuni bor — sxema to'g'ri
   } catch (e) {
-    // 42703 = undefined_column, 42P01 = undefined_table
     if (e.code === "42703" || e.code === "42P01" || e.message.includes("does not exist")) {
-      console.log("⚠️  Eski yoki mos bo'lmagan sxema topildi. Yangidan yaratilmoqda...");
-      await p.query(`
-        DROP TABLE IF EXISTS payment_locks  CASCADE;
-        DROP TABLE IF EXISTS tg_tokens      CASCADE;
-        DROP TABLE IF EXISTS payments       CASCADE;
-        DROP TABLE IF EXISTS offers         CASCADE;
-        DROP TABLE IF EXISTS products       CASCADE;
-        DROP TABLE IF EXISTS users          CASCADE;
-      `);
+      console.log("⚠️  Eski sxema. Yangidan yaratilmoqda...");
+      // MUHIM: har birini ALOHIDA query qilish kerak — pg multi-statement bajarmaydi!
+      const drops = [
+        "DROP TABLE IF EXISTS payment_locks CASCADE",
+        "DROP TABLE IF EXISTS tg_tokens     CASCADE",
+        "DROP TABLE IF EXISTS payments      CASCADE",
+        "DROP TABLE IF EXISTS offers        CASCADE",
+        "DROP TABLE IF EXISTS products      CASCADE",
+        "DROP TABLE IF EXISTS users         CASCADE",
+      ];
+      for (const sql of drops) {
+        await p.query(sql).catch(() => {});
+      }
       console.log("🗑  Eski jadvallar o'chirildi.");
     }
   }
@@ -71,13 +73,13 @@ async function initTables(p) {
   // 0. Sxema versiyasini tekshirish va kerak bo'lsa reset
   await checkAndResetSchema(p);
 
-  // 1. UUID extension
-  await run(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);
+  // 1. uuid-ossp extension (gen_random_uuid uchun kerak emas, lekin qoldiramiz)
+  await run(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`).catch(() => {});
 
   // 2. Users
   await run(`
     CREATE TABLE IF NOT EXISTS users (
-      id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       name        VARCHAR(255) NOT NULL DEFAULT '',
       phone       VARCHAR(50)  UNIQUE NOT NULL DEFAULT '',
       telegram    VARCHAR(255) DEFAULT '',
@@ -116,7 +118,7 @@ async function initTables(p) {
   // 3. Products — FK OLMADAN yaratamiz
   await run(`
     CREATE TABLE IF NOT EXISTS products (
-      id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       name            VARCHAR(255) NOT NULL DEFAULT '',
       category        VARCHAR(50)  NOT NULL DEFAULT 'boshqa',
       price           NUMERIC      NOT NULL DEFAULT 0,
@@ -194,7 +196,7 @@ async function initTables(p) {
   // 4. Offers
   await run(`
     CREATE TABLE IF NOT EXISTS offers (
-      id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
       product_id  UUID,
       buyer_id    UUID        NOT NULL,
       seller_id   UUID,
@@ -228,7 +230,7 @@ async function initTables(p) {
   // 5. Payments
   await run(`
     CREATE TABLE IF NOT EXISTS payments (
-      id           UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
       offer_id     UUID        NOT NULL UNIQUE,
       buyer_id     UUID        NOT NULL,
       seller_id    UUID,
