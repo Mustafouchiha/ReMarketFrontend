@@ -49,60 +49,77 @@ function getBot() {
     });
 
     bot.on("contact", async (ctx) => {
-      const firstName = ctx.from.first_name || "";
-      const tgChatId  = ctx.from.id;
-      const rawPhone  = ctx.message.contact.phone_number.replace(/\D/g, "");
-      const phone     = rawPhone.startsWith("998") ? rawPhone.slice(3) : rawPhone;
+      const firstName  = ctx.from.first_name || "Foydalanuvchi";
+      const lastName   = ctx.from.last_name  || "";
+      const fullName   = lastName ? `${firstName} ${lastName}` : firstName;
+      const tgChatId   = ctx.from.id;
+      const tgUsername = ctx.from.username ? `@${ctx.from.username}` : "";
+      const rawPhone   = ctx.message.contact.phone_number.replace(/\D/g, "");
+      const phone      = rawPhone.startsWith("998") ? rawPhone.slice(3) : rawPhone;
 
       try {
+        // 1. Foydalanuvchini topish yoki AVTOMATIK yaratish
         let user = await User.findOne({ phone });
-        let appUrl;
         let isNew = false;
 
-        if (user) {
-          // Mavjud user — tg_chat_id yangilansin
-          if (String(user.tg_chat_id) !== String(tgChatId)) {
-            user = await User.findByIdAndUpdate(user.id, { tg_chat_id: tgChatId }) || user;
-          }
-          const token = await createToken(user.id);
-          appUrl = `${MINI_APP_URL()}?tgToken=${token}`;
-        } else {
-          // Yangi user — ro'yxatdan o'tish URL
+        if (!user) {
+          // Yangi user → DB ga avtomatik yozamiz
           isNew = true;
-          const tgUsername = ctx.from.username ? `@${ctx.from.username}` : "";
-          const params = new URLSearchParams({
+          user = await User.create({
+            name:     fullName,
             phone,
-            tgChatId: String(tgChatId),
-            name:     firstName,
             telegram: tgUsername,
-            register: "1",
           });
-          appUrl = `${MINI_APP_URL()}?${params.toString()}`;
+          console.log(`✅ Yangi user yaratildi: ${fullName} (${phone})`);
         }
 
-        // Klaviaturani yashirish
+        // 2. tg_chat_id ni bog'laymiz
+        if (String(user.tg_chat_id) !== String(tgChatId)) {
+          user = await User.findByIdAndUpdate(user.id, { tg_chat_id: tgChatId }) || user;
+        }
+
+        // 3. OTP kodi generatsiya
+        const { createOtp } = require("./otpStore");
+        const code = createOtp(phone);
+
+        // 4. Bir martalik tgToken (to'g'ridan-to'g'ri kirish uchun)
+        const tgToken = await createToken(user.id);
+        const appUrl  = `${MINI_APP_URL()}?tgToken=${tgToken}`;
+
+        // 5. Klaviaturani yashirish
         await ctx.reply("✅", { reply_markup: { remove_keyboard: true } });
 
-        const text = isNew
-          ? `Salom, ${firstName}! 👋\n\nSiz yangi foydalanuvchisiz.\nQuyidagi havola orqali ro'yxatdan o'ting:`
-          : `Salom, ${firstName}! ✅\n\nQuyidagi havola orqali kiring:`;
+        // 6. OTP kodi xabari (SMS kabi)
+        await ctx.reply(
+          `🔐 *ReQurilish — Kirish kodi*\n\n` +
+          `Sizning kodingiz:\n` +
+          `┌─────────────┐\n` +
+          `│   \`${code}\`   │\n` +
+          `└─────────────┘\n\n` +
+          `⏱ 5 daqiqa amal qiladi\n` +
+          `🚫 Bu kodni hech kimga bermang!`,
+          { parse_mode: "Markdown" }
+        );
 
-        // web_app button + oddiy URL button (ikkalasi ham)
-        await ctx.reply(text, {
+        // 7. Mini App kirish xabari
+        const welcomeText = isNew
+          ? `🎉 *Xush kelibsiz, ${firstName}!*\n\nRo'yxatdan muvaffaqiyatli o'tdingiz.\n📱 Telefon: +998 ${phone}\n\nQuyidagi tugmani bosib kiring:`
+          : `👋 *Salom, ${firstName}!*\n\nQuyidagi tugmani bosib kiring:`;
+
+        await ctx.reply(welcomeText, {
+          parse_mode: "Markdown",
           reply_markup: {
-            inline_keyboard: [[
-              { text: "🏗 ReQurilish'ga kirish", web_app: { url: appUrl } },
-            ], [
-              { text: "🔗 Brauzerda ochish", url: appUrl },
-            ]],
+            inline_keyboard: [
+              [{ text: "🏗 ReQurilish'ga kirish", web_app: { url: appUrl } }],
+              [{ text: "🔗 Brauzerda ochish",    url: appUrl              }],
+            ],
           },
         });
 
       } catch (e) {
         console.error("Bot contact handler xatosi:", e.message, e.stack);
-        // Debug: foydalanuvchiga ham ko'rsatamiz
         ctx.reply(
-          `⚠️ Vaqtinchalik xato: ${e.message}\n\n/start bosib qayta urinib ko'ring.`
+          `⚠️ Xato yuz berdi: ${e.message}\n\n/start bosib qayta urinib ko'ring.`
         ).catch(() => {});
       }
     });
