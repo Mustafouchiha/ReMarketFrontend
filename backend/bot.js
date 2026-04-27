@@ -95,9 +95,31 @@ function getBot() {
       }
     });
 
+    bot.command("id", (ctx) => {
+      ctx.reply(`🆔 Sizning Telegram ID: \`${ctx.from.id}\``, { parse_mode: "Markdown" });
+    });
+
+    bot.command("help", (ctx) => {
+      ctx.reply(
+        `📖 *ReQurilish Bot yordam*\n\n` +
+        `/start — Botni boshlash, kirish havolasi\n` +
+        `/id — Telegram ID ni ko'rish\n\n` +
+        `❓ Muammo bo'lsa: @Requrilish_admin ga murojaat qiling`,
+        { parse_mode: "Markdown" }
+      );
+    });
+
     bot.launch()
-      .then(() => console.log("🤖 ReQurilish bot ishga tushdi"))
-      .catch(err => console.error("❌ Bot launch xatosi:", err.message));
+      .then(() => console.log("🤖 ReQurilish bot ishga tushdi (polling rejim)"))
+      .catch(err => {
+        console.error("❌ Bot launch xatosi:", err.message);
+        if (err.message.includes("401")) {
+          console.error("⚠️  TELEGRAM_BOT_TOKEN noto'g'ri! @BotFather dan token oling.");
+        }
+      });
+
+    process.once("SIGINT",  () => bot.stop("SIGINT"));
+    process.once("SIGTERM", () => bot.stop("SIGTERM"));
   }
   return bot;
 }
