@@ -42,9 +42,34 @@ async function query(text, params) {
   return getPool().query(text, params);
 }
 
+// Eski sxemani tekshirish — phone ustuni yo'q bo'lsa hammasini o'chirib qayta yaratamiz
+async function checkAndResetSchema(p) {
+  try {
+    await p.query("SELECT phone FROM users LIMIT 1");
+    // phone ustuni bor — sxema to'g'ri
+  } catch (e) {
+    // 42703 = undefined_column, 42P01 = undefined_table
+    if (e.code === "42703" || e.code === "42P01" || e.message.includes("does not exist")) {
+      console.log("⚠️  Eski yoki mos bo'lmagan sxema topildi. Yangidan yaratilmoqda...");
+      await p.query(`
+        DROP TABLE IF EXISTS payment_locks  CASCADE;
+        DROP TABLE IF EXISTS tg_tokens      CASCADE;
+        DROP TABLE IF EXISTS payments       CASCADE;
+        DROP TABLE IF EXISTS offers         CASCADE;
+        DROP TABLE IF EXISTS products       CASCADE;
+        DROP TABLE IF EXISTS users          CASCADE;
+      `);
+      console.log("🗑  Eski jadvallar o'chirildi.");
+    }
+  }
+}
+
 // Har bir jadvalni alohida query da yaratamiz — xato bo'lsa qolganlar ishlaydi
 async function initTables(p) {
   const run = (sql) => p.query(sql);
+
+  // 0. Sxema versiyasini tekshirish va kerak bo'lsa reset
+  await checkAndResetSchema(p);
 
   // 1. UUID extension
   await run(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);

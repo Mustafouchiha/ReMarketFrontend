@@ -37,8 +37,8 @@ const handle = async (res) => {
 
 // ─── AUTH ─────────────────────────────────────────────────────────
 export const authAPI = {
-  sendCode: (phone) =>
-    apiFetch(`${BASE}/auth/send-code`, { method: "POST", headers: headers(), body: JSON.stringify({ phone }) }).then(handle),
+  sendCode: (body) =>
+    apiFetch(`${BASE}/auth/send-code`, { method: "POST", headers: headers(), body: JSON.stringify(typeof body === "string" ? { phone: body } : body) }).then(handle),
   register: (body) =>
     apiFetch(`${BASE}/auth/register`, { method: "POST", headers: headers(), body: JSON.stringify(body) }).then(handle),
   login: (body) =>

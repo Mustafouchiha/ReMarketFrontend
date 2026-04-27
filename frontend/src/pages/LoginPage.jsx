@@ -86,13 +86,24 @@ export default function LoginPage({ onLogin }) {
   const handleSendCode = async () => {
     setError(""); setNeedBot(false);
     const digits = phone.replace(/\D/g, "");
-    if (digits.length < 9) { setError("To'liq telefon raqam kiriting"); return; }
+    if (digits.length < 9) { setError("To'liq telefon raqam kiriting (9 raqam)"); return; }
     setLoading(true);
     try {
-      await authAPI.sendCode(digits);
+      // Telegram WebApp dan foydalanuvchi ma'lumotlarini olamiz
+      const tgUser   = window.Telegram?.WebApp?.initDataUnsafe?.user;
+      const tgChatId = tgUser?.id || null;
+      const tgName   = tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ") : "";
+      const tgHandle = tgUser?.username ? `@${tgUser.username}` : "";
+
+      await authAPI.sendCode({
+        phone:    digits,
+        tgChatId: tgChatId ? String(tgChatId) : undefined,
+        name:     tgName   || undefined,
+        telegram: tgHandle || undefined,
+      });
       setStep(2);
     } catch (e) {
-      if (e?.needBot || e.message?.includes("ro'yxatdan") || e.message?.includes("Requrilishbot")) {
+      if (e?.needBot || e.message?.includes("ro'yxatdan") || e.message?.includes("Requrilishbot") || e.message?.includes("bog'lanmagan")) {
         setNeedBot(true);
       } else {
         setError(e.message || "Xatolik yuz berdi");
