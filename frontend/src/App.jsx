@@ -4,7 +4,7 @@ import HomePage from "./pages/HomePage";
 import ProfilePage from "./pages/ProfilePage";
 import OperatorPage from "./pages/OperatorPage";
 import { C } from "./constants";
-import { getToken, clearAuth, productsAPI, offersAPI, authAPI } from "./services/api";
+import { getToken, clearAuth, productsAPI, offersAPI, authAPI, ping } from "./services/api";
 import { Home, Plus } from "lucide-react";
 
 const OPERATOR_PHONES = ["331350206"];
@@ -100,8 +100,9 @@ export default function App() {
     }
   };
 
-  // On mount: verify token silently in background (don't block UI)
+  // On mount: ping server immediately to wake Render, then verify token
   useEffect(() => {
+    ping(); // fire-and-forget — wakes Render before user does anything
     (async () => {
       if (getToken()) {
         try {
@@ -113,7 +114,7 @@ export default function App() {
           setUser(null);
         }
       }
-      loadData(); // non-blocking background load
+      loadData();
     })();
   }, []);
 

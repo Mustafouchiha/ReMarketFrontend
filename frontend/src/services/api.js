@@ -35,6 +35,9 @@ const handle = async (res) => {
   return data;
 };
 
+// ─── PING (server warmup) ─────────────────────────────────────────
+export const ping = () => fetch(`${BASE}/ping`).catch(() => {});
+
 // ─── AUTH ─────────────────────────────────────────────────────────
 export const authAPI = {
   sendCode: (body) =>

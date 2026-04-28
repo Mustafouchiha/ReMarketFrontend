@@ -55,6 +55,9 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/operator", operatorRoutes);
 
+// ── Fast ping (no DB, wakes up Render) ───────────────────────────
+app.get("/api/ping", (_req, res) => res.json({ ok: true }));
+
 // ── Health check ─────────────────────────────────────────────────
 app.get("/", (_req, res) => {
   res.json({

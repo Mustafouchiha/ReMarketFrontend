@@ -92,6 +92,22 @@ export default function LoginPage({ onLogin }) {
     };
   };
 
+  const withRetry = async (fn, retries = 2) => {
+    for (let i = 0; i <= retries; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (e.offline && i < retries) {
+          setError(`Server uyg'onmoqda... (${i + 1}/${retries}) — biroz kuting`);
+          await new Promise(r => setTimeout(r, 8000));
+          setError("");
+          continue;
+        }
+        throw e;
+      }
+    }
+  };
+
   const handleSendCode = async () => {
     setError(""); setInfo("");
     const digits = phone.replace(/\D/g, "");
@@ -99,16 +115,16 @@ export default function LoginPage({ onLogin }) {
     setLoading(true);
     try {
       const { tgChatId, tgName, tgHandle } = getTgInfo();
-      await authAPI.sendCode({
+      await withRetry(() => authAPI.sendCode({
         phone:    digits,
         tgChatId,
         name:     tgName || "Foydalanuvchi",
         telegram: tgHandle || undefined,
-      });
+      }));
       setInfo("Telegram ga 6 xonali kod yuborildi ✅");
       setStep(2);
     } catch (e) {
-      setError(e.message || "Xatolik yuz berdi");
+      setError(e.offline ? "Server javob bermadi. Qayta urinib ko'ring." : (e.message || "Xatolik yuz berdi"));
     } finally {
       setLoading(false);
     }
@@ -120,16 +136,16 @@ export default function LoginPage({ onLogin }) {
     setLoading(true);
     try {
       const { tgChatId } = getTgInfo();
-      const data = await authAPI.login({
+      const data = await withRetry(() => authAPI.login({
         phone: phone.replace(/\D/g, ""),
         code:  code.trim(),
         tgChatId,
-      });
+      }));
       setToken(data.token);
       localStorage.setItem("rm_user", JSON.stringify(data.user));
       onLogin(data.user);
     } catch (e) {
-      setError(e.message || "Xatolik yuz berdi");
+      setError(e.offline ? "Server javob bermadi. Qayta urinib ko'ring." : (e.message || "Xatolik yuz berdi"));
     } finally {
       setLoading(false);
     }
@@ -180,7 +196,7 @@ export default function LoginPage({ onLogin }) {
 
               <BtnPrimary onClick={handleSendCode} fullWidth disabled={loading}>
                 {loading
-                  ? <><Loader2 size={14} style={{ animation:"spin 1s linear infinite" }} /> Yuborilmoqda...</>
+                  ? <><Loader2 size={14} style={{ animation:"spin 1s linear infinite" }} /> {error ? "Qayta urinilmoqda..." : "Yuborilmoqda..."}</>
                   : <><Smartphone size={14} /> Telegram ga kod yuborish</>
                 }
               </BtnPrimary>
@@ -259,7 +275,7 @@ export default function LoginPage({ onLogin }) {
 
               <BtnPrimary onClick={handleVerify} fullWidth disabled={loading}>
                 {loading
-                  ? <><Loader2 size={14} style={{ animation:"spin 1s linear infinite" }} /> Tekshirilmoqda...</>
+                  ? <><Loader2 size={14} style={{ animation:"spin 1s linear infinite" }} /> {error ? "Qayta urinilmoqda..." : "Tekshirilmoqda..."}</>
                   : <><KeyRound size={14} /> Tasdiqlash va kirish</>
                 }
               </BtnPrimary>
