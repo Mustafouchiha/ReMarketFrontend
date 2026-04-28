@@ -18,12 +18,18 @@ const headers = (extra = {}) => ({
   ...extra,
 });
 
-const apiFetch = (url, opts) =>
-  fetch(url, opts).catch(() => {
-    const err = new Error("SERVER_OFFLINE");
-    err.offline = true;
-    throw err;
-  });
+const apiFetch = (url, opts, timeoutMs = 20000) => {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(url, { ...opts, signal: ctrl.signal })
+    .then(res => { clearTimeout(timer); return res; })
+    .catch(() => {
+      clearTimeout(timer);
+      const err = new Error("SERVER_OFFLINE");
+      err.offline = true;
+      throw err;
+    });
+};
 
 const handle = async (res) => {
   const data = await res.json();
