@@ -4,7 +4,7 @@ import HomePage from "./pages/HomePage";
 import ProfilePage from "./pages/ProfilePage";
 import OperatorPage from "./pages/OperatorPage";
 import { C } from "./constants";
-import { getToken, clearAuth, productsAPI, offersAPI, authAPI, ping } from "./services/api";
+import { getToken, setToken, clearAuth, productsAPI, offersAPI, authAPI, ping } from "./services/api";
 import { Home, Plus } from "lucide-react";
 
 const OPERATOR_PHONES = ["331350206"];
@@ -60,18 +60,13 @@ function LoadingSplash() {
 
 export default function App() {
   const cached = savedUser();
-  const hasToken = !!getToken();
 
-  // If already logged in → go home immediately, no loading screen
   const [user,       setUser]       = useState(cached);
-  const [nav,        setNav]        = useState(
-    cached && hasToken ? "home" : hasTgParams() ? "login" : "home"
-  );
+  const [nav,        setNav]        = useState("home"); // always start at home
   const [products,   setProducts]   = useState([]);
   const [myProducts, setMyProducts] = useState([]);
   const [offers,     setOffers]     = useState([]);
   const [homeAction, setHomeAction] = useState(null);
-  // Only show loading splash when no cached user (fresh open, no prior login)
   const [loading,    setLoading]    = useState(false);
   const [offline,    setOffline]    = useState(false);
   const pollRef = useRef(null);
@@ -100,20 +95,59 @@ export default function App() {
     }
   };
 
-  // On mount: ping server immediately to wake Render, then verify token
+  // On mount: ping to wake server, auto-login silently in background
   useEffect(() => {
-    ping(); // fire-and-forget — wakes Render before user does anything
+    ping();
+
+    const params   = new URLSearchParams(window.location.search);
+    const tgToken  = params.get("tgToken");
+    const tgPhone  = params.get("phone");
+    const tgName   = params.get("name");
+    const tgUser   = params.get("telegram");
+    const tgChatId = params.get("tgChatId");
+    const isReg    = params.get("register") === "1";
+    if (tgToken || isReg) window.history.replaceState({}, "", window.location.pathname);
+
     (async () => {
-      if (getToken()) {
-        try {
-          const me = await authAPI.me();
-          setUser(me);
-          localStorage.setItem("rm_user", JSON.stringify(me));
-        } catch {
-          clearAuth();
-          setUser(null);
+      try {
+        if (tgToken) {
+          const data = await authAPI.loginWithTgToken(tgToken);
+          setToken(data.token);
+          localStorage.setItem("rm_user", JSON.stringify(data.user));
+          setUser(data.user);
+        } else if (isReg && tgPhone && tgChatId) {
+          const data = await authAPI.register({
+            name:     tgName || "Foydalanuvchi",
+            phone:    tgPhone.replace(/\D/g, "").slice(-9),
+            telegram: tgUser || "",
+            tgChatId,
+          });
+          setToken(data.token);
+          localStorage.setItem("rm_user", JSON.stringify(data.user));
+          setUser(data.user);
+        } else if (getToken()) {
+          // Verify existing token silently
+          try {
+            const me = await authAPI.me();
+            setUser(me);
+            localStorage.setItem("rm_user", JSON.stringify(me));
+          } catch {
+            clearAuth();
+            setUser(null);
+          }
+        } else {
+          // Try Telegram initData auto-login (silent — guest if not registered)
+          const initData = window.Telegram?.WebApp?.initData;
+          if (initData) {
+            try {
+              const data = await authAPI.tgInit(initData);
+              setToken(data.token);
+              localStorage.setItem("rm_user", JSON.stringify(data.user));
+              setUser(data.user);
+            } catch { /* not registered yet, stay as guest */ }
+          }
         }
-      }
+      } catch { /* silent */ }
       loadData();
     })();
   }, []);

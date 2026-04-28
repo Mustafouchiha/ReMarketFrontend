@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { BtnPrimary } from "../components/UI";
 import { C } from "../constants";
 import { authAPI, setToken } from "../services/api";
@@ -27,60 +27,12 @@ function formatPhone(raw) {
 }
 
 export default function LoginPage({ onLogin }) {
-  const [step,    setStep]    = useState(1);          // 1=phone, 2=otp
+  const [step,    setStep]    = useState(1);
   const [phone,   setPhone]   = useState("");
   const [code,    setCode]    = useState("");
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
   const [info,    setInfo]    = useState("");
-  const timeoutRef = useRef(null);
-
-  // Auto-login: tgToken, register params, yoki initData
-  useEffect(() => {
-    const params   = new URLSearchParams(window.location.search);
-    const tgToken  = params.get("tgToken");
-    const tgPhone  = params.get("phone");
-    const tgName   = params.get("name");
-    const tgUser   = params.get("telegram");
-    const tgChatId = params.get("tgChatId");
-    const isReg    = params.get("register") === "1";
-    window.history.replaceState({}, "", window.location.pathname);
-
-    const autoLogin = (promise) => {
-      setLoading(true);
-      timeoutRef.current = setTimeout(() => setLoading(false), 10000);
-      promise
-        .then((data) => {
-          clearTimeout(timeoutRef.current);
-          setToken(data.token);
-          localStorage.setItem("rm_user", JSON.stringify(data.user));
-          onLogin(data.user);
-        })
-        .catch(() => {
-          clearTimeout(timeoutRef.current);
-          setLoading(false);
-        });
-    };
-
-    if (tgToken) {
-      autoLogin(authAPI.loginWithTgToken(tgToken));
-      return () => clearTimeout(timeoutRef.current);
-    }
-    if (isReg && tgPhone && tgChatId) {
-      autoLogin(authAPI.register({
-        name: tgName || "Foydalanuvchi",
-        phone: tgPhone.replace(/\D/g, "").slice(-9),
-        telegram: tgUser || "",
-        tgChatId,
-      }));
-      return () => clearTimeout(timeoutRef.current);
-    }
-    const initData = window.Telegram?.WebApp?.initData;
-    if (initData) {
-      autoLogin(authAPI.tgInit(initData));
-      return () => clearTimeout(timeoutRef.current);
-    }
-  }, []);
 
   // Telegram WebApp dan user ma'lumotlari
   const getTgInfo = () => {
@@ -150,18 +102,6 @@ export default function LoginPage({ onLogin }) {
       setLoading(false);
     }
   };
-
-  // Auto-login spinner
-  if (loading && step === 1 && !phone) {
-    return (
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
-                    justifyContent:"center", height:"100vh", background:C.bg, gap:14 }}>
-        <Loader2 size={36} color={C.primaryDark} style={{ animation:"spin 1s linear infinite" }} />
-        <div style={{ fontSize:14, color:C.textMuted }}>Kirilmoqda...</div>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      </div>
-    );
-  }
 
   return (
     <div style={{
