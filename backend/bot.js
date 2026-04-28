@@ -78,30 +78,14 @@ function getBot() {
           user = await User.findByIdAndUpdate(user.id, { tg_chat_id: tgChatId }) || user;
         }
 
-        // 3. OTP kodi generatsiya
-        const { createOtp } = require("./otpStore");
-        const code = createOtp(phone);
-
-        // 4. Bir martalik tgToken (to'g'ridan-to'g'ri kirish uchun)
+        // 3. Bir martalik tgToken (to'g'ridan-to'g'ri kirish uchun)
         const tgToken = await createToken(user.id);
         const appUrl  = `${MINI_APP_URL()}?tgToken=${tgToken}`;
 
-        // 5. Klaviaturani yashirish
+        // 4. Klaviaturani yashirish
         await ctx.reply("✅", { reply_markup: { remove_keyboard: true } });
 
-        // 6. OTP kodi xabari (SMS kabi)
-        await ctx.reply(
-          `🔐 *ReQurilish — Kirish kodi*\n\n` +
-          `Sizning kodingiz:\n` +
-          `┌─────────────┐\n` +
-          `│   \`${code}\`   │\n` +
-          `└─────────────┘\n\n` +
-          `⏱ 5 daqiqa amal qiladi\n` +
-          `🚫 Bu kodni hech kimga bermang!`,
-          { parse_mode: "Markdown" }
-        );
-
-        // 7. Mini App kirish xabari
+        // 5. Mini App kirish xabari
         const welcomeText = isNew
           ? `🎉 *Xush kelibsiz, ${firstName}!*\n\nRo'yxatdan muvaffaqiyatli o'tdingiz.\n📱 Telefon: +998 ${phone}\n\nQuyidagi tugmani bosib kiring:`
           : `👋 *Salom, ${firstName}!*\n\nQuyidagi tugmani bosib kiring:`;

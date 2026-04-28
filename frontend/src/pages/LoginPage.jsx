@@ -3,7 +3,7 @@ import { BtnPrimary } from "../components/UI";
 import { C } from "../constants";
 import { authAPI, setToken } from "../services/api";
 import Logo from "../components/Logo";
-import { Smartphone, Loader2, KeyRound, AlertTriangle, ArrowLeft, UserPlus, LogIn } from "lucide-react";
+import { Smartphone, Loader2, KeyRound, AlertTriangle, ArrowLeft } from "lucide-react";
 
 const BOT_URL = import.meta.env.VITE_TG_BOT_URL || "https://t.me/Requrilishbot";
 
@@ -27,10 +27,8 @@ function formatPhone(raw) {
 }
 
 export default function LoginPage({ onLogin }) {
-  const [tab,     setTab]     = useState("login");   // "login" | "register"
   const [step,    setStep]    = useState(1);          // 1=phone, 2=otp
   const [phone,   setPhone]   = useState("");
-  const [name,    setName]    = useState("");
   const [code,    setCode]    = useState("");
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
@@ -98,14 +96,13 @@ export default function LoginPage({ onLogin }) {
     setError(""); setInfo("");
     const digits = phone.replace(/\D/g, "");
     if (digits.length < 9) { setError("9 xonali telefon raqam kiriting"); return; }
-    if (tab === "register" && !name.trim()) { setError("Ismingizni kiriting"); return; }
     setLoading(true);
     try {
       const { tgChatId, tgName, tgHandle } = getTgInfo();
       await authAPI.sendCode({
         phone:    digits,
         tgChatId,
-        name:     (tab === "register" ? name.trim() : null) || tgName || "Foydalanuvchi",
+        name:     tgName || "Foydalanuvchi",
         telegram: tgHandle || undefined,
       });
       setInfo("Telegram ga 6 xonali kod yuborildi ✅");
@@ -168,54 +165,12 @@ export default function LoginPage({ onLogin }) {
                     border:`1px solid ${C.border}`, overflow:"hidden",
                     boxShadow:"0 4px 22px rgba(0,0,0,0.08)" }}>
 
-        {/* ── Tabs ── */}
-        {step === 1 && (
-          <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
-            {[
-              { key:"login",    label:"Kirish",              icon:<LogIn    size={14}/> },
-              { key:"register", label:"Ro'yxatdan o'tish",   icon:<UserPlus size={14}/> },
-            ].map(({ key, label, icon }) => (
-              <button key={key} onClick={() => { setTab(key); setError(""); }}
-                style={{
-                  flex:1, padding:"13px 0", border:"none", cursor:"pointer",
-                  fontFamily:"inherit", fontSize:13, fontWeight:tab===key ? 800 : 600,
-                  color:     tab===key ? C.primaryDark : C.textMuted,
-                  background: tab===key ? C.primaryLight : "transparent",
-                  borderBottom: tab===key ? `2.5px solid ${C.primaryDark}` : "none",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-                  transition:"all 0.18s",
-                }}>
-                {icon} {label}
-              </button>
-            ))}
-          </div>
-        )}
 
         <div style={{ padding:"22px 20px" }}>
 
-          {/* ── Step 1: Phone (+ name for register) ── */}
+          {/* ── Step 1: Phone ── */}
           {step === 1 && (
             <>
-              {/* Name field — faqat ro'yxatdan o'tishda */}
-              {tab === "register" && (
-                <div style={{ marginBottom:12 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:C.textMuted, marginBottom:5 }}>
-                    Ism va familiya *
-                  </div>
-                  <input
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Mustafo Ismoiljonov"
-                    style={{
-                      width:"100%", boxSizing:"border-box", padding:"10px 13px",
-                      borderRadius:12, border:`1.5px solid ${C.border}`,
-                      fontSize:14, color:C.text, fontFamily:"inherit",
-                      outline:"none", background:C.bg,
-                    }}
-                  />
-                </div>
-              )}
-
               <div style={{ fontSize:12, fontWeight:700, color:C.textMuted, marginBottom:5 }}>
                 Telefon raqam *
               </div>
