@@ -111,7 +111,6 @@ function getBot() {
           reply_markup: {
             inline_keyboard: [
               [{ text: "🏗 ReQurilish'ga kirish", web_app: { url: appUrl } }],
-              [{ text: "🔗 Brauzerda ochish",    url: appUrl              }],
             ],
           },
         });
