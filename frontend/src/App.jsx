@@ -95,9 +95,15 @@ export default function App() {
     }
   };
 
-  // On mount: ping to wake server, auto-login silently in background
+  // On mount: ping aggressively to wake Render (cold start takes 30-60s)
   useEffect(() => {
     ping();
+    const warmup = [4000, 8000, 14000, 22000, 35000].map(d => setTimeout(ping, d));
+    return () => warmup.forEach(clearTimeout);
+  }, []);
+
+  // Auto-login silently in background
+  useEffect(() => {
 
     const params   = new URLSearchParams(window.location.search);
     const tgToken  = params.get("tgToken");
