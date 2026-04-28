@@ -3,10 +3,18 @@ import { BtnPrimary } from "../components/UI";
 import { C } from "../constants";
 import { authAPI, setToken } from "../services/api";
 import Logo from "../components/Logo";
-import {
-  Smartphone, Loader2,
-  KeyRound, AlertTriangle, ArrowLeft, Send,
-} from "lucide-react";
+import { Smartphone, Loader2, KeyRound, AlertTriangle, ArrowLeft, UserPlus, LogIn } from "lucide-react";
+
+const BOT_URL = import.meta.env.VITE_TG_BOT_URL || "https://t.me/Requrilishbot";
+
+// Mini App ichida Telegram link ochish (mini appni yopmaydi)
+function openBot() {
+  if (window.Telegram?.WebApp?.openTelegramLink) {
+    window.Telegram.WebApp.openTelegramLink(BOT_URL);
+  } else {
+    window.open(BOT_URL, "_blank");
+  }
+}
 
 function formatPhone(raw) {
   let d = raw.replace(/\D/g, "");
@@ -18,17 +26,18 @@ function formatPhone(raw) {
   return `${d.slice(0,2)} ${d.slice(2,5)} ${d.slice(5,7)} ${d.slice(7)}`;
 }
 
-const BOT_URL = import.meta.env.VITE_TG_BOT_URL || "https://t.me/Requrilishbot";
-
 export default function LoginPage({ onLogin }) {
-  const [step,    setStep]    = useState(1);   // 1=phone, 2=otp
+  const [tab,     setTab]     = useState("login");   // "login" | "register"
+  const [step,    setStep]    = useState(1);          // 1=phone, 2=otp
   const [phone,   setPhone]   = useState("");
+  const [name,    setName]    = useState("");
   const [code,    setCode]    = useState("");
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
-  const [needBot, setNeedBot] = useState(false);
+  const [info,    setInfo]    = useState("");
   const timeoutRef = useRef(null);
 
+  // Auto-login: tgToken, register params, yoki initData
   useEffect(() => {
     const params   = new URLSearchParams(window.location.search);
     const tgToken  = params.get("tgToken");
@@ -37,7 +46,6 @@ export default function LoginPage({ onLogin }) {
     const tgUser   = params.get("telegram");
     const tgChatId = params.get("tgChatId");
     const isReg    = params.get("register") === "1";
-
     window.history.replaceState({}, "", window.location.pathname);
 
     const autoLogin = (promise) => {
@@ -50,32 +58,25 @@ export default function LoginPage({ onLogin }) {
           localStorage.setItem("rm_user", JSON.stringify(data.user));
           onLogin(data.user);
         })
-        .catch((e) => {
+        .catch(() => {
           clearTimeout(timeoutRef.current);
           setLoading(false);
-          if (e?.needBot) setNeedBot(true);
         });
     };
 
-    // 1. Bot yuborgan bir martalik token
     if (tgToken) {
       autoLogin(authAPI.loginWithTgToken(tgToken));
       return () => clearTimeout(timeoutRef.current);
     }
-
-    // 2. Bot yo'naltirgan yangi foydalanuvchi ro'yxati
     if (isReg && tgPhone && tgChatId) {
-      const digits = tgPhone.replace(/\D/g, "").slice(-9);
       autoLogin(authAPI.register({
         name: tgName || "Foydalanuvchi",
-        phone: digits,
+        phone: tgPhone.replace(/\D/g, "").slice(-9),
         telegram: tgUser || "",
         tgChatId,
       }));
       return () => clearTimeout(timeoutRef.current);
     }
-
-    // 3. Telegram Mini App ichida — initData bilan avtomatik kirish
     const initData = window.Telegram?.WebApp?.initData;
     if (initData) {
       autoLogin(authAPI.tgInit(initData));
@@ -83,45 +84,48 @@ export default function LoginPage({ onLogin }) {
     }
   }, []);
 
+  // Telegram WebApp dan user ma'lumotlari
+  const getTgInfo = () => {
+    const u = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    return {
+      tgChatId: u?.id ? String(u.id) : undefined,
+      tgName:   u ? [u.first_name, u.last_name].filter(Boolean).join(" ") : "",
+      tgHandle: u?.username ? `@${u.username}` : "",
+    };
+  };
+
   const handleSendCode = async () => {
-    setError(""); setNeedBot(false);
+    setError(""); setInfo("");
     const digits = phone.replace(/\D/g, "");
-    if (digits.length < 9) { setError("To'liq telefon raqam kiriting (9 raqam)"); return; }
+    if (digits.length < 9) { setError("9 xonali telefon raqam kiriting"); return; }
+    if (tab === "register" && !name.trim()) { setError("Ismingizni kiriting"); return; }
     setLoading(true);
     try {
-      // Telegram WebApp dan foydalanuvchi ma'lumotlarini olamiz
-      const tgUser   = window.Telegram?.WebApp?.initDataUnsafe?.user;
-      const tgChatId = tgUser?.id || null;
-      const tgName   = tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ") : "";
-      const tgHandle = tgUser?.username ? `@${tgUser.username}` : "";
-
+      const { tgChatId, tgName, tgHandle } = getTgInfo();
       await authAPI.sendCode({
         phone:    digits,
-        tgChatId: tgChatId ? String(tgChatId) : undefined,
-        name:     tgName   || undefined,
+        tgChatId,
+        name:     (tab === "register" ? name.trim() : null) || tgName || "Foydalanuvchi",
         telegram: tgHandle || undefined,
       });
+      setInfo("Telegram ga 6 xonali kod yuborildi ✅");
       setStep(2);
     } catch (e) {
-      if (e?.needBot || e.message?.includes("ro'yxatdan") || e.message?.includes("Requrilishbot") || e.message?.includes("bog'lanmagan")) {
-        setNeedBot(true);
-      } else {
-        setError(e.message || "Xatolik yuz berdi");
-      }
+      setError(e.message || "Xatolik yuz berdi");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogin = async () => {
+  const handleVerify = async () => {
     setError("");
     if (code.trim().length !== 6) { setError("6 xonali kod kiriting"); return; }
     setLoading(true);
-    const tgChatId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || null;
     try {
+      const { tgChatId } = getTgInfo();
       const data = await authAPI.login({
         phone: phone.replace(/\D/g, ""),
-        code: code.trim(),
+        code:  code.trim(),
         tgChatId,
       });
       setToken(data.token);
@@ -134,14 +138,13 @@ export default function LoginPage({ onLogin }) {
     }
   };
 
-  // Full-screen loading (auto-login in progress)
+  // Auto-login spinner
   if (loading && step === 1 && !phone) {
     return (
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
                     justifyContent:"center", height:"100vh", background:C.bg, gap:14 }}>
-        <Loader2 size={36} color={C.primaryDark}
-          style={{ animation:"spin 1s linear infinite" }} />
-        <div style={{ fontSize:14, color:C.textMuted }}>Telegram orqali kirilmoqda...</div>
+        <Loader2 size={36} color={C.primaryDark} style={{ animation:"spin 1s linear infinite" }} />
+        <div style={{ fontSize:14, color:C.textMuted }}>Kirilmoqda...</div>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     );
@@ -152,157 +155,170 @@ export default function LoginPage({ onLogin }) {
       fontFamily:"'Nunito','Segoe UI',sans-serif", background:C.bg,
       minHeight:"100vh", maxWidth:430, margin:"0 auto",
       display:"flex", flexDirection:"column",
-      alignItems:"center", justifyContent:"center", padding:"40px 28px",
+      alignItems:"center", justifyContent:"center", padding:"32px 20px",
     }}>
-      <div style={{ marginBottom:16 }}><Logo size={80} /></div>
-      <div style={{ fontSize:28, fontWeight:900, color:C.text, marginBottom:4 }}>ReQurilish</div>
-      <div style={{ fontSize:13, color:C.textMuted, marginBottom:32, textAlign:"center" }}>
+      {/* Logo */}
+      <div style={{ marginBottom:12 }}><Logo size={72} /></div>
+      <div style={{ fontSize:26, fontWeight:900, color:C.text, marginBottom:2 }}>ReQurilish</div>
+      <div style={{ fontSize:12, color:C.textMuted, marginBottom:24, textAlign:"center" }}>
         Qurilish materiallari bozori
       </div>
 
       <div style={{ width:"100%", background:C.card, borderRadius:22,
-                    border:`1px solid ${C.border}`, padding:"24px 20px",
+                    border:`1px solid ${C.border}`, overflow:"hidden",
                     boxShadow:"0 4px 22px rgba(0,0,0,0.08)" }}>
 
-        {/* ── Step 1: Phone ── */}
+        {/* ── Tabs ── */}
         {step === 1 && (
-          <>
-            <div style={{ fontSize:15, fontWeight:800, color:C.text, marginBottom:16, textAlign:"center" }}>
-              Kirish
-            </div>
-
-            {needBot ? (
-              /* Bot required message */
-              <div style={{ textAlign:"center", padding:"8px 0 16px" }}>
-                <div style={{ width:56, height:56, borderRadius:18, margin:"0 auto 14px",
-                              background:"#E8F6FD", border:"2px solid #2AABEE",
-                              display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <Send size={28} color="#0088CC" />
-                </div>
-                <div style={{ fontSize:15, fontWeight:900, color:C.text, marginBottom:8 }}>
-                  Bot orqali kiring
-                </div>
-                <div style={{ fontSize:13, color:C.textMuted, lineHeight:1.6, marginBottom:18 }}>
-                  Bu raqam botda ro'yxatdan o'tmagan.<br />
-                  @Requrilishbot da /start bosing va telefon raqamingizni yuboring.
-                </div>
-                <a href={BOT_URL} target="_blank" rel="noreferrer" style={{ textDecoration:"none" }}>
-                  <button style={{
-                    width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                    padding:"13px 0", borderRadius:14, border:"1.5px solid #2AABEE",
-                    background:"#E8F6FD", color:"#0088CC", fontFamily:"inherit",
-                    fontSize:14, fontWeight:800, cursor:"pointer",
-                  }}>
-                    <Send size={16} color="#0088CC" /> @Requrilishbot ga o'tish
-                  </button>
-                </a>
-                <button onClick={() => setNeedBot(false)}
-                  style={{ marginTop:12, background:"none", border:"none", color:C.textMuted,
-                           fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
-                  ← Orqaga
-                </button>
-              </div>
-            ) : (
-              <>
-                <div style={{ fontSize:12, fontWeight:700, color:C.textMuted, marginBottom:6 }}>
-                  Telefon raqam *
-                </div>
-                <PhoneInput value={phone} onChange={setPhone} onEnter={handleSendCode} />
-
-                {error && <ErrorBox msg={error} />}
-
-                <BtnPrimary onClick={handleSendCode} fullWidth disabled={loading}>
-                  {loading
-                    ? <><Loader2 size={15} style={{ animation:"spin 1s linear infinite" }} /> Tekshirilmoqda...</>
-                    : <><Smartphone size={15} /> Kod yuborish →</>
-                  }
-                </BtnPrimary>
-
-                <div style={{ display:"flex", alignItems:"center", gap:10, margin:"16px 0 14px" }}>
-                  <div style={{ flex:1, height:1, background:C.border }} />
-                  <span style={{ fontSize:11, color:C.textMuted, whiteSpace:"nowrap" }}>yoki</span>
-                  <div style={{ flex:1, height:1, background:C.border }} />
-                </div>
-
-                <a href={BOT_URL} target="_blank" rel="noreferrer" style={{ textDecoration:"none" }}>
-                  <button style={{
-                    width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                    padding:"11px 0", borderRadius:14, border:"1.5px solid #2AABEE",
-                    background:"#E8F6FD", color:"#0088CC", fontFamily:"inherit",
-                    fontSize:13, fontWeight:700, cursor:"pointer",
-                  }}>
-                    <Send size={15} color="#0088CC" /> Telegram orqali kirish
-                  </button>
-                </a>
-                <div style={{ textAlign:"center", marginTop:12, fontSize:11, color:C.textMuted }}>
-                  Hisob yo'qmi? <a href={BOT_URL} target="_blank" rel="noreferrer"
-                    style={{ color:C.primaryDark, fontWeight:700 }}>
-                    @Requrilishbot orqali ro'yxatdan o'ting
-                  </a>
-                </div>
-              </>
-            )}
-          </>
+          <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
+            {[
+              { key:"login",    label:"Kirish",              icon:<LogIn    size={14}/> },
+              { key:"register", label:"Ro'yxatdan o'tish",   icon:<UserPlus size={14}/> },
+            ].map(({ key, label, icon }) => (
+              <button key={key} onClick={() => { setTab(key); setError(""); }}
+                style={{
+                  flex:1, padding:"13px 0", border:"none", cursor:"pointer",
+                  fontFamily:"inherit", fontSize:13, fontWeight:tab===key ? 800 : 600,
+                  color:     tab===key ? C.primaryDark : C.textMuted,
+                  background: tab===key ? C.primaryLight : "transparent",
+                  borderBottom: tab===key ? `2.5px solid ${C.primaryDark}` : "none",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                  transition:"all 0.18s",
+                }}>
+                {icon} {label}
+              </button>
+            ))}
+          </div>
         )}
 
-        {/* ── Step 2: OTP ── */}
-        {step === 2 && (
-          <>
-            <button onClick={() => { setStep(1); setCode(""); setError(""); }} style={{
-              display:"flex", alignItems:"center", gap:5, background:"none",
-              border:"none", cursor:"pointer", color:C.textSub,
-              fontSize:12, fontWeight:700, marginBottom:20, padding:0, fontFamily:"inherit",
-            }}>
-              <ArrowLeft size={14} /> Orqaga
-            </button>
+        <div style={{ padding:"22px 20px" }}>
 
-            <div style={{ textAlign:"center", marginBottom:24 }}>
-              <div style={{ width:60, height:60, borderRadius:18, margin:"0 auto 14px",
-                            background:"#E8F6FD", border:"2px solid #2AABEE",
-                            display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <Send size={28} color="#0088CC" />
+          {/* ── Step 1: Phone (+ name for register) ── */}
+          {step === 1 && (
+            <>
+              {/* Name field — faqat ro'yxatdan o'tishda */}
+              {tab === "register" && (
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:C.textMuted, marginBottom:5 }}>
+                    Ism va familiya *
+                  </div>
+                  <input
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Mustafo Ismoiljonov"
+                    style={{
+                      width:"100%", boxSizing:"border-box", padding:"10px 13px",
+                      borderRadius:12, border:`1.5px solid ${C.border}`,
+                      fontSize:14, color:C.text, fontFamily:"inherit",
+                      outline:"none", background:C.bg,
+                    }}
+                  />
+                </div>
+              )}
+
+              <div style={{ fontSize:12, fontWeight:700, color:C.textMuted, marginBottom:5 }}>
+                Telefon raqam *
               </div>
-              <div style={{ fontSize:18, fontWeight:900, color:C.text, marginBottom:6 }}>
-                Telegram kod
+              <PhoneInput value={phone} onChange={setPhone} onEnter={handleSendCode} />
+
+              {error && <ErrorBox msg={error} />}
+
+              <BtnPrimary onClick={handleSendCode} fullWidth disabled={loading}>
+                {loading
+                  ? <><Loader2 size={14} style={{ animation:"spin 1s linear infinite" }} /> Yuborilmoqda...</>
+                  : <><Smartphone size={14} /> Telegram ga kod yuborish</>
+                }
+              </BtnPrimary>
+
+              {/* Bot link — Mini App ichida to'g'ri ochiladi */}
+              <div style={{ marginTop:16, padding:"11px 14px", borderRadius:13,
+                            background:"#E8F6FD", border:"1px solid #BDE3F8",
+                            display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ fontSize:20 }}>💬</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:"#0088CC", marginBottom:2 }}>
+                    Telegram bot orqali ham kirish mumkin
+                  </div>
+                  <button onClick={openBot} style={{
+                    background:"none", border:"none", padding:0, cursor:"pointer",
+                    fontSize:11, color:"#0088CC", fontFamily:"inherit", fontWeight:700,
+                    textDecoration:"underline",
+                  }}>
+                    @Requrilishbot → /start
+                  </button>
+                </div>
               </div>
-              <div style={{ fontSize:12, color:C.textMuted, lineHeight:1.5 }}>
-                @Requrilishbot dan 6 xonali kod keldi
+            </>
+          )}
+
+          {/* ── Step 2: OTP ── */}
+          {step === 2 && (
+            <>
+              <button onClick={() => { setStep(1); setCode(""); setError(""); setInfo(""); }}
+                style={{ display:"flex", alignItems:"center", gap:5, background:"none",
+                         border:"none", cursor:"pointer", color:C.textSub,
+                         fontSize:12, fontWeight:700, marginBottom:18, padding:0, fontFamily:"inherit" }}>
+                <ArrowLeft size={13} /> Orqaga
+              </button>
+
+              <div style={{ textAlign:"center", marginBottom:20 }}>
+                <div style={{ fontSize:36, marginBottom:8 }}>📨</div>
+                <div style={{ fontSize:17, fontWeight:900, color:C.text, marginBottom:4 }}>
+                  Telegram kodingizni kiriting
+                </div>
+                <div style={{ fontSize:12, color:C.textMuted, lineHeight:1.5 }}>
+                  @Requrilishbot dan 6 xonali kod yuborildi
+                </div>
+                <div style={{ marginTop:8, display:"inline-block",
+                              background:C.primaryLight, border:`1px solid ${C.primaryBorder}`,
+                              borderRadius:10, padding:"4px 14px",
+                              fontSize:14, fontWeight:900, color:C.primaryDark }}>
+                  +998 {phone}
+                </div>
               </div>
-              <div style={{ display:"inline-block", marginTop:6, background:C.primaryLight,
-                            border:`1px solid ${C.primaryBorder}`, borderRadius:10, padding:"5px 14px",
-                            fontSize:15, fontWeight:900, color:C.primaryDark }}>
-                +998 {phone}
+
+              {info && (
+                <div style={{ marginBottom:12, padding:"9px 13px", borderRadius:10,
+                              background:"#F0FFF4", color:"#22863a", fontSize:12, fontWeight:600 }}>
+                  {info}
+                </div>
+              )}
+
+              <input
+                value={code}
+                onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="• • • • • •"
+                inputMode="numeric"
+                autoFocus
+                style={{
+                  width:"100%", boxSizing:"border-box", padding:"16px",
+                  borderRadius:16, marginBottom:14,
+                  border:`2.5px solid ${code.length >= 6 ? C.primaryDark : C.primaryBorder}`,
+                  background:C.bg, fontSize:32, fontWeight:900, letterSpacing:10,
+                  textAlign:"center", color:C.text, outline:"none", fontFamily:"inherit",
+                }}
+                onKeyDown={e => e.key === "Enter" && handleVerify()}
+              />
+
+              {error && <ErrorBox msg={error} />}
+
+              <BtnPrimary onClick={handleVerify} fullWidth disabled={loading}>
+                {loading
+                  ? <><Loader2 size={14} style={{ animation:"spin 1s linear infinite" }} /> Tekshirilmoqda...</>
+                  : <><KeyRound size={14} /> Tasdiqlash va kirish</>
+                }
+              </BtnPrimary>
+
+              <div style={{ textAlign:"center", marginTop:12, fontSize:11, color:C.textMuted }}>
+                Kod kelmadimi?{" "}
+                <span onClick={() => { setStep(1); setCode(""); setError(""); }}
+                  style={{ color:C.primaryDark, fontWeight:700, cursor:"pointer" }}>
+                  Qayta yuborish
+                </span>
               </div>
-            </div>
-
-            <input value={code}
-              onChange={e => setCode(e.target.value.replace(/\D/g,"").slice(0,6))}
-              placeholder="• • • • • •" inputMode="numeric" autoFocus
-              style={{ width:"100%", boxSizing:"border-box", padding:"16px", borderRadius:16, marginBottom:16,
-                       border:`2.5px solid ${code.length>=6?C.primaryDark:C.primaryBorder}`,
-                       background:C.bg, fontSize:32, fontWeight:900, letterSpacing:10,
-                       textAlign:"center", color:C.text, outline:"none", fontFamily:"inherit" }}
-              onKeyDown={e => e.key==="Enter" && handleLogin()}
-            />
-
-            {error && <ErrorBox msg={error} />}
-
-            <BtnPrimary onClick={handleLogin} fullWidth disabled={loading}>
-              {loading
-                ? <><Loader2 size={15} style={{ animation:"spin 1s linear infinite" }} /> Tekshirilmoqda...</>
-                : <><KeyRound size={15} /> Kirish</>
-              }
-            </BtnPrimary>
-
-            <div style={{ textAlign:"center", marginTop:14, fontSize:11, color:C.textMuted }}>
-              Kod kelmadimi?{" "}
-              <span onClick={() => { setStep(1); setCode(""); }}
-                style={{ color:C.primaryDark, fontWeight:700, cursor:"pointer" }}>
-                Qayta yuborish
-              </span>
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
@@ -312,7 +328,7 @@ export default function LoginPage({ onLogin }) {
 function PhoneInput({ value, onChange, onEnter }) {
   const [focus, setFocus] = useState(false);
   return (
-    <div style={{ position:"relative", marginBottom:13 }}>
+    <div style={{ position:"relative", marginBottom:12 }}>
       <span style={{ position:"absolute", left:13, top:"50%", transform:"translateY(-50%)",
                      fontSize:13, color:C.textSub, fontWeight:700, userSelect:"none", pointerEvents:"none" }}>
         +998
@@ -320,12 +336,14 @@ function PhoneInput({ value, onChange, onEnter }) {
       <input
         value={value} inputMode="numeric" placeholder="90 000 00 00"
         onChange={e => onChange(formatPhone(e.target.value))}
-        onKeyDown={e => e.key==="Enter" && onEnter?.()}
+        onKeyDown={e => e.key === "Enter" && onEnter?.()}
         onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-        style={{ width:"100%", boxSizing:"border-box", padding:"10px 13px 10px 54px",
-                 borderRadius:12, border:`1.5px solid ${focus?C.primary:C.border}`,
-                 fontSize:15, fontWeight:400, color:C.text, fontFamily:"inherit", outline:"none",
-                 background:C.bg, transition:"border-color 0.2s", letterSpacing:1 }}
+        style={{
+          width:"100%", boxSizing:"border-box", padding:"10px 13px 10px 54px",
+          borderRadius:12, border:`1.5px solid ${focus ? C.primary : C.border}`,
+          fontSize:15, fontWeight:400, color:C.text, fontFamily:"inherit",
+          outline:"none", background:C.bg, transition:"border-color 0.2s", letterSpacing:1,
+        }}
       />
     </div>
   );
@@ -333,11 +351,10 @@ function PhoneInput({ value, onChange, onEnter }) {
 
 function ErrorBox({ msg }) {
   return (
-    <div style={{ padding:"10px 14px", borderRadius:10, marginBottom:12,
+    <div style={{ padding:"9px 13px", borderRadius:10, marginBottom:12,
                   background:"#FFF1F0", color:"#FF4D4F", fontSize:12, fontWeight:600,
                   display:"flex", alignItems:"center", gap:7 }}>
-      <AlertTriangle size={14} color="#FF4D4F" />
-      {msg}
+      <AlertTriangle size={13} color="#FF4D4F" /> {msg}
     </div>
   );
 }
