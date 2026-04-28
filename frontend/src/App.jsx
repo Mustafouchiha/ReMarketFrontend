@@ -24,7 +24,6 @@ const savedUser = () => {
 function hasTgParams() {
   const p = new URLSearchParams(window.location.search);
   if (p.has("tgToken") || p.get("register") === "1") return true;
-  // Inside Telegram Mini App → always try auto-login via initData
   return !!window.Telegram?.WebApp?.initData;
 }
 
@@ -60,13 +59,20 @@ function LoadingSplash() {
 }
 
 export default function App() {
-  const [user,       setUser]       = useState(savedUser);
-  const [nav,        setNav]        = useState(hasTgParams() ? "login" : "home");
+  const cached = savedUser();
+  const hasToken = !!getToken();
+
+  // If already logged in → go home immediately, no loading screen
+  const [user,       setUser]       = useState(cached);
+  const [nav,        setNav]        = useState(
+    cached && hasToken ? "home" : hasTgParams() ? "login" : "home"
+  );
   const [products,   setProducts]   = useState([]);
   const [myProducts, setMyProducts] = useState([]);
   const [offers,     setOffers]     = useState([]);
   const [homeAction, setHomeAction] = useState(null);
-  const [loading,    setLoading]    = useState(!!savedUser());
+  // Only show loading splash when no cached user (fresh open, no prior login)
+  const [loading,    setLoading]    = useState(false);
   const [offline,    setOffline]    = useState(false);
   const pollRef = useRef(null);
 
@@ -94,22 +100,20 @@ export default function App() {
     }
   };
 
-  // On mount: verify token + load data
+  // On mount: verify token silently in background (don't block UI)
   useEffect(() => {
     (async () => {
-      try {
-        if (getToken()) {
+      if (getToken()) {
+        try {
           const me = await authAPI.me();
           setUser(me);
           localStorage.setItem("rm_user", JSON.stringify(me));
+        } catch {
+          clearAuth();
+          setUser(null);
         }
-      } catch {
-        clearAuth();
-        setUser(null);
-      } finally {
-        await loadData();
-        setLoading(false);
       }
+      loadData(); // non-blocking background load
     })();
   }, []);
 
