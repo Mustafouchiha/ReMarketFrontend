@@ -73,10 +73,16 @@ export default function LoginPage({ onLogin }) {
         name:     tgName || "Foydalanuvchi",
         telegram: tgHandle || undefined,
       }));
-      setInfo("Telegram ga 6 xonali kod yuborildi ✅");
+      setInfo("✅ Telegram ga 6 xonali kod yuborildi");
       setStep(2);
     } catch (e) {
-      setError(e.offline ? "Server javob bermadi. Qayta urinib ko'ring." : (e.message || "Xatolik yuz berdi"));
+      if (e.offline) {
+        setError("Server vaqtincha ishlamayapti. Bir oz kuting va qayta urining.");
+      } else if (e.needBot || (e.message || "").toLowerCase().includes("bot")) {
+        setError("Avval @Requrilishbot ga /start yuboring, keyin qaytib keling.");
+      } else {
+        setError(e.message || "Xatolik yuz berdi");
+      }
     } finally {
       setLoading(false);
     }

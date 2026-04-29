@@ -95,11 +95,12 @@ export default function App() {
     }
   };
 
-  // On mount: ping aggressively to wake Render (cold start takes 30-60s)
+  // Render ni uyg'otish: ilova ochilganda va har 4 daqiqada ping
   useEffect(() => {
     ping();
-    const warmup = [4000, 8000, 14000, 22000, 35000].map(d => setTimeout(ping, d));
-    return () => warmup.forEach(clearTimeout);
+    const warmup  = [3000, 7000, 13000, 20000, 30000].map(d => setTimeout(ping, d));
+    const keepAlive = setInterval(ping, 4 * 60 * 1000); // 4 daqiqada 1 marta
+    return () => { warmup.forEach(clearTimeout); clearInterval(keepAlive); };
   }, []);
 
   // Auto-login silently in background
