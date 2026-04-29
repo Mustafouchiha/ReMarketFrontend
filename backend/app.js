@@ -55,8 +55,12 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/operator", operatorRoutes);
 
-// ── Fast ping (no DB, wakes up Render) ───────────────────────────
-app.get("/api/ping", (_req, res) => res.json({ ok: true }));
+// ── Ping: Render + Neon ni uyg'otadi ─────────────────────────────
+app.get("/api/ping", async (_req, res) => {
+  res.json({ ok: true }); // darhol javob
+  // Neon ni fonda uyg'otish (javobni kutmaymiz)
+  try { const { query } = require("./db"); query("SELECT 1"); } catch {}
+});
 
 // ── Health check ─────────────────────────────────────────────────
 app.get("/", (_req, res) => {
