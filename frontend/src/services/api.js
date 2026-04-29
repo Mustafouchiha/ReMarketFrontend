@@ -18,16 +18,16 @@ const headers = (extra = {}) => ({
   ...extra,
 });
 
-const apiFetch = (url, opts, timeoutMs = 20000) => {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  return fetch(url, { ...opts, signal: ctrl.signal })
-    .then(res => { clearTimeout(timer); return res; })
-    .catch(() => {
-      clearTimeout(timer);
-      const err = new Error("SERVER_OFFLINE");
-      err.offline = true;
-      throw err;
+const apiFetch = (url, opts, timeoutMs = 15000) => {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => {
+      const e = new Error("SERVER_OFFLINE"); e.offline = true; reject(e);
+    }, timeoutMs)
+  );
+  return Promise.race([fetch(url, opts), timeout])
+    .catch((e) => {
+      if (e.offline) throw e;
+      const err = new Error("SERVER_OFFLINE"); err.offline = true; throw err;
     });
 };
 

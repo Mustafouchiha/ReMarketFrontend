@@ -44,14 +44,14 @@ export default function LoginPage({ onLogin }) {
     };
   };
 
-  const withRetry = async (fn, retries = 4) => {
+  const withRetry = async (fn, retries = 6) => {
     for (let i = 0; i <= retries; i++) {
       try {
         return await fn();
       } catch (e) {
         if (e.offline && i < retries) {
-          setError(`Server uyg'onmoqda, kuting...`);
-          await new Promise(r => setTimeout(r, 5000));
+          setError(`Ulanmoqda... (${i + 1})`);
+          await new Promise(r => setTimeout(r, 4000));
           setError("");
           continue;
         }
